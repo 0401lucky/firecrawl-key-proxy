@@ -1,51 +1,41 @@
-# Logging Guidelines
+# Logging Guidelines — Backend
 
-> How logging is done in this project.
+## 基础设施
 
----
+- 标准库 `log/slog`，JSON handler，输出到 stdout。级别由 `LOG_LEVEL` 控制。
+- `internal/logging.New(level) (*slog.Logger, error)`：非法级别返回错误，
+  由调用方决定是否终止，不静默降级。
+- `main()` 里 `slog.SetDefault(logger)`，全项目用包级 `slog` 函数即可。
 
-## Overview
+## 上游 Key 脱敏（AC11 的守门人）
 
-<!--
-Document your project's logging conventions here.
+全项目只有 `internal/logging.MaskKey` 一份实现，任何日志/API 输出都不得
+直接打印上游 Key 明文：
 
-Questions to answer:
-- What logging library do you use?
-- What are the log levels and when to use each?
-- What should be logged?
-- What should NOT be logged (PII, secrets)?
--->
+```go
+func MaskKey(key string) string {
+    if len(key) <= 4 {
+        return "fc-****"
+    }
+    return "fc-****" + key[len(key)-4:]
+}
+// MaskKey("fc-1234567890abcd") -> "fc-****abcd"
+```
 
-(To be filled by the team)
+- 代理 Key 记**名称**而非值。
+- 领域结构体上的敏感字段带 `json:"-"`，防止误序列化泄漏（上线前全局 grep）。
 
----
+## 代理请求日志（每请求一条）
 
-## Log Levels
+```go
+slog.Info("proxy request",
+    "method", r.Method, "path", r.URL.Path,
+    "proxy_key", proxyKeyName,
+    "upstream_key", logging.MaskKey(uk.APIKey),
+    "upstream_status", upstreamStatus,
+    "failover_count", failoverCount,
+    "duration_ms", durationMs,
+)
+```
 
-<!-- When to use each level: debug, info, warn, error -->
-
-(To be filled by the team)
-
----
-
-## Structured Logging
-
-<!-- Log format, required fields -->
-
-(To be filled by the team)
-
----
-
-## What to Log
-
-<!-- Important events to log -->
-
-(To be filled by the team)
-
----
-
-## What NOT to Log
-
-<!-- Sensitive data, PII, secrets -->
-
-(To be filled by the team)
+能回答审计问题：「这次请求用了哪个账号、是否发生过转移」。

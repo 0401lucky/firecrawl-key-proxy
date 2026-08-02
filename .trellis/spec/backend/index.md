@@ -14,11 +14,11 @@ This directory contains guidelines for backend development. Fill in each file wi
 
 | Guide | Description | Status |
 |-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | Module organization and file layout | To fill |
-| [Database Guidelines](./database-guidelines.md) | ORM patterns, queries, migrations | To fill |
-| [Error Handling](./error-handling.md) | Error types, handling strategies | To fill |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
-| [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
+| [Directory Structure](./directory-structure.md) | Module organization and file layout | 已填充 |
+| [Database Guidelines](./database-guidelines.md) | SQLite 连接串、时间表示、仓储契约 | 已填充 |
+| [Error Handling](./error-handling.md) | 配置聚合报错、HTTP 错误契约 | 已填充 |
+| [Quality Guidelines](./quality-guidelines.md) | 测试策略、5xx 不惩罚 Key、环境坑 | 已填充 |
+| [Logging Guidelines](./logging-guidelines.md) | slog JSON、MaskKey 脱敏 | 已填充 |
 
 ---
 
@@ -35,4 +35,4 @@ The goal is to help AI assistants and new team members understand how YOUR proje
 
 ---
 
-**Language**: All documentation should be written in **English**.
+**Language**: 全部文档使用简体中文（本项目约定）。
