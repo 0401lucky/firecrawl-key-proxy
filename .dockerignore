@@ -1,0 +1,40 @@
+# 构建上下文裁剪：只给 Dockerfile 需要的文件，避免把 node_modules、测试数据
+# 与 git 元数据塞进镜像构建上下文（影响构建速度与产物纯净度）。
+
+# 依赖目录（各阶段内自行安装，绝不带入宿主机的）
+node_modules
+web/node_modules
+
+# 前端构建产物：由 Dockerfile 阶段 1 在镜像内重建，宿主机上的产物
+# （含陈旧的占位 index.html 或真实产物）一律不进上下文，从根上杜绝
+# 「COPY . . 把旧前端带进镜像」的问题。
+internal/webui/dist
+web/dist
+
+# 后端构建产物
+bin
+server
+server.exe
+
+# 本地运行数据（SQLite 文件、日志）
+*.db
+*.db-shm
+*.db-wal
+*.log
+/data
+
+# 环境与凭据
+.env
+.env.local
+
+# 版本库与编辑器
+.git
+.gitignore
+.idea
+.vscode
+.trellis
+*.md
+Dockerfile
+docker-compose.yml
+Caddyfile.example
+README.md

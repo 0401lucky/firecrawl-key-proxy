@@ -15,3 +15,13 @@
 - 提交前需 `git checkout -- internal/webui/dist/index.html` 恢复占位页(assets 不入库,真实产物由
   C7 Dockerfile 在 go build 前构建)。
 
+## 2026-08-02 — 归档 C1–C5 + C7 容器化与部署完成
+
+- 归档 C1–C5(实现早已提交,状态未收尾);go vet + go test 全绿后逐个 archive。
+- C7 落地:Dockerfile(三阶段 node→go→alpine,非 root uid 10001,HEALTHCHECK,
+  Go 镜像用 1.25 匹配 go.mod,不是 design 里旧的 1.22)、.dockerignore、docker-compose.yml
+  (proxy 仅 expose,内置 Caddy 用 profile tls)、.env.example、Caddyfile.example、README.md。
+- 验证全部实测:镜像 32MB;健康检查 healthy;/healthz 200;容器内面板与 session API 正常;
+  AC12 数据跨 down/up 保留;缺失必填变量聚合报错退出;层缓存命中(npm/go mod 不重装)。
+- 坑:wget 在容器里可用但 busybox 版不支持 cookie,AC12 测试改用带端口映射的一次性容器+宿主 curl。
+

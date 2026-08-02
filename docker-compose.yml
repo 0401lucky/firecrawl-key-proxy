@@ -1,0 +1,57 @@
+# Firecrawl 多 Key 反向代理 — 容器化部署
+#
+# 快速开始：
+#   1. cp .env.example .env，填写 PUBLIC_BASE_URL 与 ADMIN_PASSWORD
+#   2. docker compose up -d
+#   3. 打开 $PUBLIC_BASE_URL 进入管理面板
+#
+# 启用内置 Caddy TLS 网关（需要域名已解析到本机）：
+#   docker compose --profile tls up -d
+#
+# 不想用内置 Caddy 时，把 proxy 的 expose 换成
+#   ports: ["127.0.0.1:8080:8080"]
+# 然后由你自己的 Nginx/Caddy 反代到 127.0.0.1:8080。
+
+services:
+  proxy:
+    build: .
+    restart: unless-stopped
+    environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DB_PATH: /data/proxy.db
+      UPSTREAM_BASE_URL: ${UPSTREAM_BASE_URL:-https://api.firecrawl.dev}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PROXY_PATH_PREFIXES: ${PROXY_PATH_PREFIXES:-/v1/,/v2/}
+      MAX_FAILOVER_ATTEMPTS: ${MAX_FAILOVER_ATTEMPTS:-3}
+      DEFAULT_COOLDOWN_SECONDS: ${DEFAULT_COOLDOWN_SECONDS:-60}
+      MAX_REQUEST_BUFFER_BYTES: ${MAX_REQUEST_BUFFER_BYTES:-8388608}
+      JOB_ROUTE_TTL_HOURS: ${JOB_ROUTE_TTL_HOURS:-48}
+      CREDIT_REFRESH_MINUTES: ${CREDIT_REFRESH_MINUTES:-10}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
+    volumes:
+      - proxy-data:/data
+    # 默认不向宿主机暴露端口，只在 compose 网络内可达（由 caddy 或外部网关转发）。
+    # 需要本机直接访问时改 ports: ["127.0.0.1:8080:8080"]。
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    profiles: ["tls"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # 先编辑 Caddyfile.example 里的域名，再启用本 profile。
+      - ./Caddyfile.example:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - proxy
+
+volumes:
+  proxy-data:
+  caddy-data:
+  caddy-config:

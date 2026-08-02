@@ -1,0 +1,13 @@
+# Firecrawl 代理 — Caddy TLS 网关示例
+#
+# 使用前提：
+#   1. 把 your-domain.com 换成你的真实域名，并确保其 A/AAAA 记录已解析到本机公网 IP；
+#   2. 本机 80/443 端口对公网可达（Caddy 需要它们完成 ACME 自动签发与续期）；
+#   3. 启用方式：docker compose --profile tls up -d
+#
+# 自动 HTTPS 由 Caddy 完成，程序自身只监听 HTTP（见项目 README 的架构说明）。
+
+your-domain.com {
+	# 反代到 compose 网络内的 proxy 服务；proxy 不向宿主机暴露端口。
+	reverse_proxy proxy:8080
+}
