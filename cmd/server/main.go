@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"firecrawl-proxy/internal/config"
+	"firecrawl-proxy/internal/keypool"
 	"firecrawl-proxy/internal/logging"
 	"firecrawl-proxy/internal/store"
 )
@@ -57,6 +58,16 @@ func run(ctx context.Context) error {
 
 	st := store.NewStore(db)
 	logger.Info("数据库就绪", "path", cfg.DBPath)
+
+	pool, err := keypool.New(st.UpstreamKeys, keypool.RealClock{}, keypool.Config{
+		DefaultCooldown: time.Duration(cfg.DefaultCooldownSec) * time.Second,
+		FlushInterval:   10 * time.Second,
+	})
+	if err != nil {
+		return err
+	}
+	go pool.Run(ctx)
+	logger.Info("上游 Key 池就绪")
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +106,10 @@ func run(ctx context.Context) error {
 		logger.Error("HTTP 服务关闭超时", "error", err.Error())
 	}
 
-	// C2 接入后在此冲刷内存中的用量计数（先于 db.Close）。
+	// 先冲刷内存中的用量计数，再关闭数据库（顺序不可颠倒）。
+	if err := pool.Flush(); err != nil {
+		logger.Error("退出前刷盘失败", "error", err.Error())
+	}
 	logger.Info("服务已退出")
 	return nil
 }
