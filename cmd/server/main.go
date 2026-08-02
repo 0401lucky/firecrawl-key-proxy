@@ -20,12 +20,15 @@ import (
 	"syscall"
 	"time"
 
+	"firecrawl-proxy/internal/admin"
 	"firecrawl-proxy/internal/auth"
 	"firecrawl-proxy/internal/config"
+	"firecrawl-proxy/internal/firecrawl"
 	"firecrawl-proxy/internal/keypool"
 	"firecrawl-proxy/internal/logging"
 	"firecrawl-proxy/internal/proxy"
 	"firecrawl-proxy/internal/store"
+	"firecrawl-proxy/internal/webui"
 )
 
 func main() {
@@ -88,20 +91,32 @@ func run(ctx context.Context) error {
 	proxyAuth := auth.NewProxyKeyAuth(st.ProxyKeys)
 	go proxyAuth.Run(ctx)
 
+	// 面板会话与 API。
+	sessionAuth := auth.NewSessionAuth(st.Sessions, cfg.AdminPassword,
+		time.Duration(cfg.SessionTTLHours)*time.Hour, keypool.RealClock{}, logger)
+	go sessionAuth.StartSessionCleanup(ctx)
+	adminServer := admin.NewServer(pool, st, proxyAuth, sessionAuth,
+		firecrawl.NewClient(cfg.UpstreamBaseURL), logger, keypool.RealClock{})
+	// 后台额度刷新：独立 goroutine，出错/关闭不影响代理调度。
+	go adminServer.StartCreditRefresh(ctx, time.Duration(cfg.CreditRefreshMinutes)*time.Minute)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+	// 面板 JSON API（session cookie 认证，与代理认证互斥）。
+	mux.Handle("/api/admin/", adminServer.Router())
 	// 代理转发路径：按前缀挂载，外层包代理 Key 认证中间件（AC7/AC13）。
 	// 中间件只覆盖代理前缀，/healthz 与 /api/admin/* 不受影响。
 	authedProxy := proxyAuth.Middleware(proxyHandler)
 	for _, p := range cfg.ProxyPathPrefixes {
 		mux.Handle(p, authedProxy)
 	}
+	// SPA 静态资源兜底（最低优先级，最长前缀匹配保证它最后命中）。
+	mux.Handle("/", webui.Handler())
 
-	// 后续子任务（C5 面板、C6 静态资源）在此注册路由。
 	_ = st
 
 	srv := &http.Server{
