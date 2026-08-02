@@ -19,6 +19,72 @@
   }
 }
 
+@layer components {
+  /* ---- 文字层级 ----
+     浅色模式下每一级都达到 WCAG AA（正文 ≥4.5:1）。
+     此前全站大量使用 text-slate-400，在白底只有约 2.8:1，
+     是「字太浅」的根源；次要文字下限改为 slate-500（约 5:1）。 */
+  .t-primary {
+    @apply text-slate-900 dark:text-slate-100;
+  }
+  .t-body {
+    @apply text-slate-700 dark:text-slate-200;
+  }
+  .t-secondary {
+    @apply text-slate-600 dark:text-slate-300;
+  }
+  .t-muted {
+    @apply text-slate-500 dark:text-slate-400;
+  }
+  /* 小标题：靠字重和字距拉开层级，而不是靠调浅颜色 */
+  .t-label {
+    @apply text-[11px] font-semibold tracking-[0.14em] text-slate-500 dark:text-slate-400;
+  }
+
+  /* ---- 侧栏 ----
+     侧栏在两种主题下都是深色底，因此文字色不能跟随浅色模式，
+     否则会出现深底配深灰字（原先 text-slate-600 就是这个问题）。 */
+  .rail-link {
+    @apply flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-slate-300
+           transition-colors hover:bg-white/5 hover:text-white;
+  }
+  .rail-index {
+    @apply font-mono text-[11px] text-slate-500 transition-colors;
+  }
+
+  /* ---- 表面 ---- */
+  .surface {
+    @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+    @apply dark:border-ink-line dark:bg-ink-raised dark:shadow-panel;
+  }
+  .hairline {
+    @apply border-slate-200 dark:border-ink-line;
+  }
+
+  /* ---- 表单与按钮 ---- */
+  .field {
+    @apply rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900
+           outline-none transition-colors placeholder:text-slate-400
+           focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20;
+    @apply dark:border-ink-line dark:bg-ink dark:text-slate-100 dark:placeholder:text-slate-500;
+  }
+  .btn-primary {
+    @apply rounded-md bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950
+           transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-ghost {
+    @apply rounded-md border border-slate-300 px-4 py-2.5 text-sm text-slate-700
+           transition-colors hover:bg-slate-100 disabled:opacity-50;
+    @apply dark:border-ink-line dark:text-slate-300 dark:hover:bg-ink-line/60;
+  }
+  .btn-mini {
+    @apply rounded border border-slate-300 px-2 py-1 text-slate-700 transition-colors
+           hover:bg-slate-100 disabled:opacity-50;
+    @apply dark:border-ink-line dark:text-slate-300 dark:hover:bg-ink-line/60;
+  }
+}
+
+
 /* 精密仪表的点状网格背景 */
 .bg-instrument {
   background-image: radial-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px);

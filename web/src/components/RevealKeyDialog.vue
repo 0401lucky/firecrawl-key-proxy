@@ -35,42 +35,33 @@ async function copy() {
         class="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
         @click.self="emit('close')"
       >
-        <div
-          class="w-full max-w-lg rounded-lg border border-amber-400/40 bg-white p-6 shadow-panel dark:bg-ink-raised"
-          role="dialog"
-          aria-modal="true"
-        >
+        <div class="surface w-full max-w-lg border-amber-400/70 p-6" role="dialog" aria-modal="true">
           <div class="flex items-start justify-between">
             <div>
-              <h3 class="font-mono text-sm font-semibold tracking-wide text-amber-600 dark:text-amber-400">
+              <h3 class="font-mono text-sm font-semibold tracking-wide text-amber-700 dark:text-amber-400">
                 新的 API Key 已创建
               </h3>
-              <p class="mt-1 text-xs text-slate-400 dark:text-slate-500">名称：{{ props.name }}</p>
+              <p class="mt-1 text-xs t-secondary">名称：{{ props.name }}</p>
             </div>
-            <span class="rounded bg-amber-400/15 px-2 py-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+            <span class="rounded bg-amber-400/20 px-2 py-1 text-[11px] font-semibold text-amber-800 dark:text-amber-300">
               仅此一次
             </span>
           </div>
 
-          <div class="mt-4 rounded-md border border-ink-line bg-slate-50 p-3 dark:bg-ink">
-            <code class="num block select-all break-all text-sm text-slate-800 dark:text-amber-200">
+          <div class="mt-4 rounded-md border border-slate-300 bg-slate-50 p-3 dark:border-ink-line dark:bg-ink">
+            <code class="num block select-all break-all text-sm text-slate-900 dark:text-amber-200">
               {{ props.plaintext }}
             </code>
           </div>
 
-          <p class="mt-3 text-xs leading-relaxed text-red-500 dark:text-red-400">
+          <p class="mt-3 text-xs leading-relaxed text-red-600 dark:text-red-400">
             关闭后无法再次查看，请立即保存到安全位置。数据库只存哈希，遗失只能重新创建。
           </p>
 
           <div class="mt-5 flex justify-end gap-3">
+            <button class="btn-ghost py-2" @click="emit('close')">关闭</button>
             <button
-              class="rounded-md border border-ink-line px-4 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-ink-line/60"
-              @click="emit('close')"
-            >
-              关闭
-            </button>
-            <button
-              class="rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-amber-400"
+              class="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-amber-400"
               @click="copy"
             >
               {{ copied ? '已复制 ✓' : '复制到剪贴板' }}

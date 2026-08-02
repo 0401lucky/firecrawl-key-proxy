@@ -64,24 +64,17 @@ function cooldownText(k: UpstreamKey): string {
 </script>
 
 <template>
-  <div class="max-w-6xl animate-rise">
+  <div class="max-w-5xl animate-rise">
     <header class="flex items-baseline justify-between">
-      <h1 class="font-mono text-xl font-semibold tracking-wide text-slate-800 dark:text-slate-100">
-        总览
-      </h1>
-      <span class="num text-xs text-slate-400 dark:text-slate-500">{{ updatedAgo }}</span>
+      <h1 class="font-mono text-xl font-semibold tracking-wide t-primary">总览</h1>
+      <span class="num text-xs t-muted">{{ updatedAgo }}</span>
     </header>
 
     <!-- 额度池 -->
-    <section
-      v-if="overview"
-      class="mt-6 rounded-lg border border-ink-line bg-white p-6 shadow-panel dark:bg-ink-raised"
-    >
+    <section v-if="overview" class="surface mt-6 p-6">
       <div class="flex items-center justify-between">
-        <div class="text-xs font-medium tracking-widest text-slate-400 dark:text-slate-500">
-          额度池
-        </div>
-        <div class="num text-sm text-slate-500 dark:text-slate-400">
+        <div class="t-label">额度池</div>
+        <div class="num text-sm t-secondary">
           <span class="text-lg font-semibold text-amber-600 dark:text-amber-400">
             {{ overview.credits_remaining_sum }}
           </span>
@@ -89,13 +82,13 @@ function cooldownText(k: UpstreamKey): string {
           {{ overview.credits_total_sum }}
         </div>
       </div>
-      <div class="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-ink-line/60">
+      <div class="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-ink-line/60">
         <div
           class="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-700"
           :style="{ width: poolPercent + '%' }"
         />
       </div>
-      <div class="mt-2 flex justify-between text-[11px] text-slate-400 dark:text-slate-500">
+      <div class="mt-2 flex justify-between text-xs t-muted">
         <span>{{ poolPercent }}% 可用</span>
         <span class="num">剩余 / 总量</span>
       </div>
@@ -103,67 +96,52 @@ function cooldownText(k: UpstreamKey): string {
 
     <!-- 状态计数条 -->
     <div class="mt-4 flex flex-wrap gap-2">
-      <div
-        v-for="c in countList"
-        :key="c.label"
-        class="rounded-md border border-ink-line bg-white px-3 py-1.5 text-xs dark:bg-ink-raised"
-      >
-        <span class="text-slate-400 dark:text-slate-500">{{ c.label }}</span>
-        <span class="num ml-1.5 font-semibold text-slate-700 dark:text-slate-200">{{ c.n }}</span>
+      <div v-for="c in countList" :key="c.label" class="surface px-3 py-1.5 text-xs">
+        <span class="t-muted">{{ c.label }}</span>
+        <span class="num ml-1.5 font-semibold t-primary">{{ c.n }}</span>
       </div>
-      <div
-        class="rounded-md border border-ink-line bg-white px-3 py-1.5 text-xs dark:bg-ink-raised"
-      >
-        <span class="text-slate-400 dark:text-slate-500">API Key</span>
-        <span class="num ml-1.5 font-semibold text-slate-700 dark:text-slate-200">
-          {{ overview?.proxy_key_count ?? 0 }}
-        </span>
+      <div class="surface px-3 py-1.5 text-xs">
+        <span class="t-muted">API Key</span>
+        <span class="num ml-1.5 font-semibold t-primary">{{ overview?.proxy_key_count ?? 0 }}</span>
       </div>
     </div>
 
     <!-- 上游 Key 卡片 -->
-    <h2 class="mt-8 text-xs font-medium tracking-widest text-slate-400 dark:text-slate-500">
-      上游 KEY 状态
-    </h2>
+    <h2 class="t-label mt-8">上游 KEY 状态</h2>
     <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="(k, i) in keys"
         :key="k.id"
-        class="rounded-lg border border-ink-line bg-white p-4 shadow-panel animate-rise dark:bg-ink-raised"
+        class="surface p-4 animate-rise"
         :style="{ animationDelay: `${i * 40}ms` }"
       >
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0">
-            <div class="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-              {{ k.name }}
-            </div>
-            <div class="num mt-0.5 truncate text-[11px] text-slate-400 dark:text-slate-500">
-              {{ k.masked }}
-            </div>
+            <div class="truncate text-sm font-medium t-primary">{{ k.name }}</div>
+            <div class="num mt-0.5 truncate text-[11px] t-muted">{{ k.masked }}</div>
           </div>
           <StateBadge :state="k.state" :disabled="!k.enabled" />
         </div>
 
-        <div class="mt-3 flex items-end justify-between border-t border-ink-line/70 pt-3">
+        <div class="mt-3 flex items-end justify-between border-t hairline pt-3">
           <div>
-            <div class="text-[10px] tracking-widest text-slate-400 dark:text-slate-500">剩余额度</div>
-            <div class="num text-sm text-slate-700 dark:text-slate-200">
-              {{ k.credits_remaining ?? '—' }}
-            </div>
+            <div class="t-label">剩余额度</div>
+            <div class="num mt-0.5 text-sm t-body">{{ k.credits_remaining ?? '—' }}</div>
           </div>
           <div class="text-right">
             <div v-if="k.state === 'cooling'" class="num text-xs text-amber-600 dark:text-amber-400">
               ⏳ {{ cooldownText(k) }}
             </div>
-            <div v-else class="num text-xs text-slate-400 dark:text-slate-500">
-              调用 {{ k.request_count }}
-            </div>
+            <div v-else class="num text-xs t-muted">调用 {{ k.request_count }}</div>
           </div>
         </div>
       </div>
     </div>
-    <p v-if="keys.length === 0" class="mt-4 text-sm text-slate-400">
-      还没有上游 Key，去「上游 Key」页录入。
-    </p>
+
+    <!-- 空态：给一条明确的下一步，而不只是一句灰字 -->
+    <div v-if="keys.length === 0" class="surface mt-3 px-6 py-10 text-center">
+      <p class="text-sm t-secondary">还没有上游 Key。</p>
+      <RouterLink to="/keys" class="btn-primary mt-4 inline-block">去录入第一个 Key</RouterLink>
+    </div>
   </div>
 </template>

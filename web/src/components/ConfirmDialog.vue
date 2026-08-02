@@ -21,30 +21,21 @@ const emit = defineEmits<{
         class="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
         @click.self="emit('cancel')"
       >
-        <div
-          class="w-full max-w-md rounded-lg border border-ink-line bg-white p-6 shadow-panel dark:bg-ink-raised"
-          role="dialog"
-          aria-modal="true"
-        >
-          <h3 class="font-mono text-sm font-semibold tracking-wide text-slate-800 dark:text-slate-100">
+        <div class="surface w-full max-w-md p-6" role="dialog" aria-modal="true">
+          <h3 class="font-mono text-sm font-semibold tracking-wide t-primary">
             {{ props.title }}
           </h3>
-          <p class="mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+          <p class="mt-3 text-sm leading-relaxed t-secondary">
             {{ props.message }}
           </p>
           <div class="mt-6 flex justify-end gap-3">
+            <button class="btn-ghost py-2" @click="emit('cancel')">取消</button>
             <button
-              class="rounded-md border border-ink-line px-4 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-ink-line/60"
-              @click="emit('cancel')"
-            >
-              取消
-            </button>
-            <button
-              class="rounded-md px-4 py-2 text-sm font-medium text-white transition-colors"
+              class="rounded-md px-4 py-2 text-sm font-semibold transition-colors"
               :class="
                 props.danger
-                  ? 'bg-red-600 hover:bg-red-500'
-                  : 'bg-amber-500 text-black hover:bg-amber-400'
+                  ? 'bg-red-600 text-white hover:bg-red-500'
+                  : 'bg-amber-500 text-slate-950 hover:bg-amber-400'
               "
               @click="emit('confirm')"
             >

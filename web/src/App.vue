@@ -38,50 +38,42 @@ const isLogin = computed(() => route.path === '/login')
   </div>
 
   <div v-else class="flex min-h-screen bg-instrument">
-    <!-- 左侧仪表轨 -->
+    <!-- 左侧仪表轨：两种主题下都是深色底，故文字色不跟随主题 -->
     <aside
-      class="fixed inset-y-0 left-0 z-20 flex w-52 flex-col border-r border-ink-line bg-ink-raised/80 backdrop-blur dark:border-ink-line dark:bg-ink-raised/80"
+      class="fixed inset-y-0 left-0 z-20 flex w-52 flex-col border-r border-ink-line bg-ink-raised"
     >
-      <div class="flex items-center gap-2 px-5 pb-4 pt-6">
-        <div class="grid h-8 w-8 place-items-center rounded bg-amber-400 font-mono text-sm font-bold text-black shadow-lamp">
+      <div class="flex items-center gap-2.5 px-5 pb-5 pt-6">
+        <div class="grid h-8 w-8 place-items-center rounded bg-amber-400 font-mono text-sm font-bold text-slate-950 shadow-lamp">
           F
         </div>
         <div class="leading-tight">
-          <div class="font-mono text-xs font-semibold tracking-widest text-slate-300 dark:text-slate-200">
+          <div class="font-mono text-xs font-semibold tracking-[0.18em] text-slate-100">
             FIRECRAWL
           </div>
-          <div class="text-[11px] text-slate-400 dark:text-slate-500">多 Key 反向代理</div>
+          <div class="mt-0.5 text-[11px] text-slate-400">多 Key 反向代理</div>
         </div>
       </div>
 
-      <nav class="mt-2 flex-1 space-y-1 px-3">
+      <nav class="mt-1 flex-1 space-y-1 px-3">
         <RouterLink
           v-for="item in navItems"
           :key="item.to"
           :to="item.to"
-          class="group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-slate-600 transition-colors hover:bg-ink-line/40 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-ink-line/60 dark:hover:text-slate-100"
-          active-class="!bg-amber-400/10 !text-amber-600 dark:!text-amber-300 font-medium"
+          class="rail-link group"
+          active-class="!bg-amber-400/15 !text-amber-200 font-medium"
         >
-          <span class="font-mono text-[11px] text-slate-400/70 group-hover:text-amber-500/70">
-            {{ item.index }}
-          </span>
+          <span class="rail-index group-hover:text-slate-300">{{ item.index }}</span>
           {{ item.label }}
         </RouterLink>
       </nav>
 
       <div class="space-y-1 border-t border-ink-line px-3 py-4">
-        <button
-          class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-ink-line/40 dark:text-slate-400 dark:hover:bg-ink-line/60"
-          @click="toggle"
-        >
-          <span class="font-mono text-[11px] text-slate-400/70">TT</span>
+        <button class="rail-link group w-full" @click="toggle">
+          <span class="rail-index group-hover:text-slate-300">TT</span>
           {{ theme === 'dark' ? '浅色模式' : '深色模式' }}
         </button>
-        <button
-          class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-ink-line/40 dark:text-slate-400 dark:hover:bg-ink-line/60"
-          @click="logout"
-        >
-          <span class="font-mono text-[11px] text-slate-400/70">XX</span>
+        <button class="rail-link group w-full" @click="logout">
+          <span class="rail-index group-hover:text-slate-300">XX</span>
           登出
         </button>
       </div>
@@ -99,11 +91,11 @@ const isLogin = computed(() => route.path === '/login')
       <div
         v-for="t in toasts"
         :key="t.id"
-        class="pointer-events-auto flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm shadow-panel animate-toastIn"
+        class="pointer-events-auto flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm shadow-lg animate-toastIn"
         :class="
           t.type === 'success'
-            ? 'border-emerald-500/40 bg-white text-slate-800 dark:bg-ink-raised dark:text-slate-100'
-            : 'border-red-500/40 bg-white text-slate-800 dark:bg-ink-raised dark:text-slate-100'
+            ? 'border-emerald-500/50 bg-white text-slate-800 dark:bg-ink-raised dark:text-slate-100'
+            : 'border-red-500/50 bg-white text-slate-800 dark:bg-ink-raised dark:text-slate-100'
         "
       >
         <span class="flex items-center gap-2">
@@ -113,7 +105,7 @@ const isLogin = computed(() => route.path === '/login')
           />
           <span>{{ t.text }}</span>
         </span>
-        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" @click="remove(t.id)">
+        <button class="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100" @click="remove(t.id)">
           ✕
         </button>
       </div>
