@@ -202,6 +202,19 @@ func (p *Pool) Flush() error {
 	return p.repo.IncrementUsage(usage)
 }
 
+// GetByID 按 id 返回内存中的上游 Key（运行时权威副本）。
+// 用于 job 粘连等需要「按 id 取 Key」的场景；Key 已被删除时返回 ErrNoKeyAvailable。
+func (p *Pool) GetByID(keyID int64) (*store.UpstreamKey, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, e := range p.keys {
+		if e.uk.ID == keyID {
+			return &e.uk, nil
+		}
+	}
+	return nil, ErrNoKeyAvailable
+}
+
 // Reload 从 DB 重新加载全部 Key。供面板增删改 Key 后调用，变更立即生效。
 // 替换前先把当前 usage 刷盘，避免丢失未落库的计数。
 func (p *Pool) Reload() error {

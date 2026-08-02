@@ -57,6 +57,15 @@ func (r *JobRouteRepo) Get(jobID string) (*JobRoute, error) {
 	return &jr, nil
 }
 
+// Delete 按 job id 删除一条映射（例如映射指向的上游 Key 已被删除时的清理）。
+func (r *JobRouteRepo) Delete(jobID string) error {
+	_, err := r.db.Exec("DELETE FROM job_routes WHERE job_id = ?", jobID)
+	if err != nil {
+		return fmt.Errorf("删除 job 映射 %q 失败: %w", jobID, err)
+	}
+	return nil
+}
+
 // DeleteExpired 删除所有已过期的映射，返回删除条数。
 func (r *JobRouteRepo) DeleteExpired(now time.Time) (int64, error) {
 	res, err := r.db.Exec("DELETE FROM job_routes WHERE expires_at < ?", now.Unix())
