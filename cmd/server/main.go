@@ -23,6 +23,7 @@ import (
 	"firecrawl-proxy/internal/config"
 	"firecrawl-proxy/internal/keypool"
 	"firecrawl-proxy/internal/logging"
+	"firecrawl-proxy/internal/proxy"
 	"firecrawl-proxy/internal/store"
 )
 
@@ -69,14 +70,32 @@ func run(ctx context.Context) error {
 	go pool.Run(ctx)
 	logger.Info("上游 Key 池就绪")
 
+	proxyHandler, err := proxy.NewHandler(pool, st.JobRoutes, logger, proxy.Config{
+		UpstreamBaseURL:  cfg.UpstreamBaseURL,
+		PublicBaseURL:    cfg.PublicBaseURL,
+		PathPrefixes:     cfg.ProxyPathPrefixes,
+		MaxAttempts:      cfg.MaxFailoverAttempts,
+		MaxRequestBuffer: cfg.MaxRequestBufferSize,
+		JobTTL:           time.Duration(cfg.JobRouteTTLHours) * time.Hour,
+		Clock:            keypool.RealClock{},
+	})
+	if err != nil {
+		return err
+	}
+	go proxyHandler.StartCleanup(ctx)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+	// 代理转发路径：按前缀挂载。认证中间件（C4）届时包在最外层。
+	for _, p := range cfg.ProxyPathPrefixes {
+		mux.Handle(p, proxyHandler)
+	}
 
-	// 后续子任务（C3 代理、C5 面板、C6 静态资源）在此注册路由。
+	// 后续子任务（C5 面板、C6 静态资源）在此注册路由。
 	_ = st
 
 	srv := &http.Server{
