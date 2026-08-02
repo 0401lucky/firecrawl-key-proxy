@@ -84,10 +84,11 @@ func (r *UpstreamKeyRepo) Create(uk *UpstreamKey) (int64, error) {
 	if uk.State == "" {
 		uk.State = StateAvailable
 	}
+	now := time.Now()
 	res, err := r.db.Exec(
 		`INSERT INTO upstream_keys (name, api_key, key_suffix, state, created_at)
 		 VALUES (?, ?, ?, ?, ?)`,
-		uk.Name, uk.APIKey, uk.KeySuffix, string(uk.State), time.Now().Unix(),
+		uk.Name, uk.APIKey, uk.KeySuffix, string(uk.State), now.Unix(),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("插入上游 Key 失败: %w", err)
@@ -97,6 +98,8 @@ func (r *UpstreamKeyRepo) Create(uk *UpstreamKey) (int64, error) {
 		return 0, fmt.Errorf("读取自增 id 失败: %w", err)
 	}
 	uk.ID = id
+	uk.CreatedAt = now
+	uk.Enabled = true
 	return id, nil
 }
 

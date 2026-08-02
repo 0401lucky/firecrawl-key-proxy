@@ -141,6 +141,9 @@ func (h *Handler) forwardLoop(w http.ResponseWriter, r *http.Request) {
 	buf, buffered := h.bufferRequestBody(r)
 
 	var tried []int64
+	var lastKey *store.UpstreamKey
+	var lastStatus int
+	var lastNetErr error
 	for attempt := 0; attempt < h.maxAttempts; attempt++ {
 		key, err := h.pool.NextExcluding(tried)
 		if err != nil {
@@ -169,6 +172,10 @@ func (h *Handler) forwardLoop(w http.ResponseWriter, r *http.Request) {
 			bodyLen = int64(len(buf))
 		}
 		resp, netErr := h.forward(r, body, bodyLen, key)
+		lastKey, lastStatus, lastNetErr = key, 0, netErr
+		if resp != nil {
+			lastStatus = resp.StatusCode
+		}
 		var statusCode int
 		if resp != nil {
 			statusCode = resp.StatusCode
@@ -195,6 +202,9 @@ func (h *Handler) forwardLoop(w http.ResponseWriter, r *http.Request) {
 
 	// 次数耗尽仍失败（此处必是 buffered=true 且都是可重试错误）。
 	_, counts := h.pool.Snapshot()
+	if lastKey != nil {
+		h.logRequest(r, lastKey, lastStatus, h.maxAttempts-1, start, lastNetErr)
+	}
 	writeJSONError(w, http.StatusBadGateway,
 		"upstream_failover_exhausted", "多次换 Key 重试后仍失败", counts)
 }

@@ -18,7 +18,7 @@ const (
 type UpstreamKey struct {
 	ID               int64
 	Name             string
-	APIKey           string // 明文，仅存储与转发用，json:"-" 防泄漏
+	APIKey           string `json:"-"` // 明文，仅存储与转发用，禁止序列化泄漏
 	KeySuffix        string // 末 4 位，展示用
 	Enabled          bool
 	State            KeyState

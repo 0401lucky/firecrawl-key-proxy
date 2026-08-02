@@ -52,12 +52,13 @@ func (r *ProxyKeyRepo) List() ([]ProxyKey, error) {
 	return out, rows.Err()
 }
 
-// Create 插入一条下游代理 Key，返回自增 id。
+// Create 插入一条下游代理 Key，返回自增 id。成功后回填 id 与 created_at。
 func (r *ProxyKeyRepo) Create(pk *ProxyKey) (int64, error) {
+	now := time.Now()
 	res, err := r.db.Exec(
 		`INSERT INTO proxy_keys (name, key_hash, key_prefix, created_at)
 		 VALUES (?, ?, ?, ?)`,
-		pk.Name, pk.KeyHash, pk.KeyPrefix, time.Now().Unix(),
+		pk.Name, pk.KeyHash, pk.KeyPrefix, now.Unix(),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("插入代理 Key 失败: %w", err)
@@ -67,6 +68,7 @@ func (r *ProxyKeyRepo) Create(pk *ProxyKey) (int64, error) {
 		return 0, fmt.Errorf("读取自增 id 失败: %w", err)
 	}
 	pk.ID = id
+	pk.CreatedAt = now
 	return id, nil
 }
 
