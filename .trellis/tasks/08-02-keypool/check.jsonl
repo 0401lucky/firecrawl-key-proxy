@@ -1,0 +1,2 @@
+{"file": ".trellis/tasks/08-02-firecrawl-key-proxy/design.md", "reason": "父任务技术设计：架构、数据模型、请求流程、API 契约"}
+{"file": ".trellis/tasks/08-02-firecrawl-key-proxy/prd.md", "reason": "父任务需求与全局验收标准，含 Firecrawl 上游行为的已确认事实"}

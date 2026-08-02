@@ -1,0 +1,28 @@
+# 构建产物
+/bin/
+/server
+/server.exe
+
+# 前端构建输出（由 npm run build 生成，仅保留占位文件供 go:embed 使用）
+/internal/webui/dist/*
+!/internal/webui/dist/.gitkeep
+!/internal/webui/dist/index.html
+
+# 依赖
+/web/node_modules/
+
+# 运行时数据
+*.db
+*.db-shm
+*.db-wal
+/data/
+
+# 环境配置（含 ADMIN_PASSWORD 等敏感项）
+.env
+.env.local
+
+# 编辑器与系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
