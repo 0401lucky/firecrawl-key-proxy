@@ -2,11 +2,13 @@ package admin
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"firecrawl-proxy/internal/firecrawl"
 	"firecrawl-proxy/internal/logging"
 	"firecrawl-proxy/internal/store"
 )
@@ -146,8 +148,13 @@ func (s *Server) handleDeleteUpstreamKey(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleRefreshCredits 立即拉取该 Key 的额度并写回。
-// 拉取失败只记 warning、保留上次值，不改变 Key 状态。
+// handleRefreshCredits 拉取该 Key 的额度并写回，同时充当「这个 Key 还能不能用」的探测。
+//
+// 用 credit-usage 而非发一次真实 scrape 来探测：前者不消耗 credits，
+// 对免费账号更友好，而且直接给出余额。
+//
+// 失败时按上游状态码给出可操作的提示，但**不改变 Key 状态**——额度展示与调度
+// 保持解耦（见父任务 design §7），Key 状态只由真实转发结果驱动。
 func (s *Server) handleRefreshCredits(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
@@ -162,7 +169,8 @@ func (s *Server) handleRefreshCredits(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.logger.Warn("额度拉取失败",
 			"key", logging.MaskKey(uk.APIKey), "key_id", id, "error", err.Error())
-		writeError(w, http.StatusBadGateway, "credit_refresh_failed", "额度拉取失败："+err.Error())
+		code, msg := describeUpstreamFailure(err)
+		writeError(w, http.StatusBadGateway, code, msg)
 		return
 	}
 	s.pool.SetCredits(id, usage.Total, usage.Remaining)
@@ -171,6 +179,25 @@ func (s *Server) handleRefreshCredits(w http.ResponseWriter, r *http.Request) {
 		"credits_remaining": usage.Remaining,
 		"credits_synced_at": s.clock.Now(),
 	})
+}
+
+// describeUpstreamFailure 把上游错误翻译成调用方能据此行动的提示。
+// 401/402/429 的语义完全不同，混成一句「拉取失败」等于没说。
+func describeUpstreamFailure(err error) (code, msg string) {
+	var apiErr *firecrawl.APIError
+	if !errors.As(err, &apiErr) {
+		return "upstream_unreachable", "连不上 Firecrawl，请检查服务器网络：" + err.Error()
+	}
+	switch apiErr.StatusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return "key_invalid", "这个 Key 无效或已被吊销，请核对后重新录入"
+	case http.StatusPaymentRequired:
+		return "key_exhausted", "这个 Key 的额度已耗尽"
+	case http.StatusTooManyRequests:
+		return "key_rate_limited", "触发上游限流，稍后再试（Key 本身可能仍然可用）"
+	default:
+		return "credit_refresh_failed", apiErr.Error()
+	}
 }
 
 // ---- 工具 ----

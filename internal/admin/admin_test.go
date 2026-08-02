@@ -428,13 +428,14 @@ func TestProxyKeyCreateThenListNoPlaintext(t *testing.T) {
 
 func TestRefreshCredits(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/team/credit-usage" {
-			t.Errorf("路径应为 /team/credit-usage, got %s", r.URL.Path)
+		if r.URL.Path != "/v2/team/credit-usage" {
+			t.Errorf("路径应为 /v2/team/credit-usage, got %s", r.URL.Path)
 		}
 		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer fc-admin-") {
 			t.Errorf("应带上游 Key 认证, got %q", r.Header.Get("Authorization"))
 		}
-		io.WriteString(w, `{"credits_total":100,"credits_used":20,"credits_remaining":80}`)
+		// 上游实际返回的形状：套 data 外层、camelCase。
+		io.WriteString(w, `{"success":true,"data":{"remainingCredits":80,"planCredits":100}}`)
 	}))
 	defer up.Close()
 

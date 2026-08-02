@@ -55,7 +55,9 @@ async function patch(k: UpstreamKey, patch: { enabled?: boolean; reset?: boolean
   }
 }
 
-async function refreshCredits(k: UpstreamKey) {
+// 测试可用性：调 credit-usage（不消耗 credits），顺带把余额刷新回来。
+// 成功即说明这个 Key 现在能正常访问 Firecrawl。
+async function testKey(k: UpstreamKey) {
   if (busyId.value === k.id) return
   busyId.value = k.id
   try {
@@ -69,9 +71,10 @@ async function refreshCredits(k: UpstreamKey) {
         credits_synced_at: r.credits_synced_at,
       }
     }
-    push('success', `「${k.name}」额度已刷新`)
+    push('success', `「${k.name}」可用，剩余 ${r.credits_remaining} credits`)
   } catch (e) {
-    push('error', (e as Error).message)
+    // 后端已按 401/402/429/网络错误给出可操作的提示，直接透出。
+    push('error', `「${k.name}」${(e as Error).message}`)
   } finally {
     busyId.value = null
   }
@@ -182,8 +185,13 @@ function cooldownText(k: UpstreamKey): string {
                 >
                   重置
                 </button>
-                <button class="btn-mini" :disabled="busyId === k.id" @click="refreshCredits(k)">
-                  刷新额度
+                <button
+                  class="btn-mini"
+                  :disabled="busyId === k.id"
+                  title="调用 Firecrawl 额度接口验证可用性，不消耗 credits"
+                  @click="testKey(k)"
+                >
+                  {{ busyId === k.id ? '测试中…' : '测试' }}
                 </button>
                 <button
                   class="rounded border border-red-500/60 px-2 py-1 text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
