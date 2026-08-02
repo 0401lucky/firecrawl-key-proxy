@@ -52,6 +52,38 @@ services:
     depends_on:
       - proxy
 
+  # ---- 可选：MCP 端点（--profile mcp）----
+  # 给只支持远程 MCP、无法自定义 Firecrawl 地址的客户端用（如 Android 上的
+  # RikkaHub：传输类型只有 Streamable HTTP / SSE，起不了 npx 本地进程）。
+  #
+  # 链路：客户端 → mcp-gate(校验 token) → firecrawl-mcp → 本代理 → 上游 Key 池
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    restart: unless-stopped
+    profiles: ["mcp"]
+    environment:
+      # 指向本代理的对外地址，让 MCP 的所有抓取都走 Key 池调度
+      FIRECRAWL_API_URL: ${PUBLIC_BASE_URL}
+      # 面板里创建的调用 Key。MCP 服务端不接受客户端自带的 key，只能烘在这里
+      FIRECRAWL_API_KEY: ${MCP_PROXY_KEY}
+    expose:
+      - "3000"
+
+  mcp-gate:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    profiles: ["mcp"]
+    environment:
+      MCP_ACCESS_TOKEN: ${MCP_ACCESS_TOKEN}
+    volumes:
+      - ./Caddyfile.mcp:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:${MCP_HOST_PORT:-8082}:3000"
+    depends_on:
+      - mcp
+
 volumes:
   proxy-data:
   caddy-data:

@@ -1,0 +1,28 @@
+# MCP 端点的认证网关。
+#
+# firecrawl-mcp 在 HTTP_STREAMABLE_SERVER 模式下不校验任何凭据——它把
+# FIRECRAWL_API_KEY 烘在服务端环境里，客户端请求头里的 key 不会被采纳
+# （那套是 CLOUD_SERVICE 托管模式 + OAuth 才有的行为）。
+# 因此裸暴露等于把额度池开放给任何知道 URL 的人，这里补一道 token 校验。
+#
+# 客户端需要带请求头：X-MCP-Token: <MCP_ACCESS_TOKEN>
+{
+	admin off
+	auto_https off
+}
+
+:3000 {
+	@authorized header X-MCP-Token "{$MCP_ACCESS_TOKEN}"
+
+	handle @authorized {
+		reverse_proxy mcp:3000 {
+			# MCP 的 Streamable HTTP 会长时间保持流式响应，不能提前掐断。
+			flush_interval -1
+		}
+	}
+
+	handle {
+		header Content-Type application/json
+		respond `{"error":"unauthorized","message":"缺少或错误的 X-MCP-Token 请求头"}` 401
+	}
+}
