@@ -81,6 +81,9 @@ func (r *UpstreamKeyRepo) Create(uk *UpstreamKey) (int64, error) {
 	if uk.KeySuffix == "" {
 		uk.KeySuffix = lastChars(uk.APIKey, 4)
 	}
+	if uk.State == "" {
+		uk.State = StateAvailable
+	}
 	res, err := r.db.Exec(
 		`INSERT INTO upstream_keys (name, api_key, key_suffix, state, created_at)
 		 VALUES (?, ?, ?, ?, ?)`,

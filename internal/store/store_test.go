@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -72,6 +73,60 @@ func TestOpenIdempotent(t *testing.T) {
 		if n != 1 {
 			t.Errorf("表 %s 应存在, got %d", table, n)
 		}
+	}
+}
+
+func TestOpenPathContainsHash(t *testing.T) {
+	// 回归测试：路径含 # 时，数据库必须落在正确路径。
+	// 曾因 file: 前缀 + SQLite URI 解析把 # 当片段分隔符，数据库静默落到
+	// 截断后的错误文件。
+	root := t.TempDir()
+	dir := filepath.Join(root, "x#01")
+	db, err := Open(filepath.Join(dir, "pool.db"))
+	if err != nil {
+		t.Fatalf("Open(# 路径) 失败: %v", err)
+	}
+	st := NewStore(db)
+	if _, err := st.UpstreamKeys.Create(&UpstreamKey{Name: "k", APIKey: "fc-hash"}); err != nil {
+		t.Fatalf("Create() 失败: %v", err)
+	}
+	db.Close()
+
+	// 数据必须落在预期文件：dir/pool.db。
+	if _, err := os.Stat(filepath.Join(dir, "pool.db")); err != nil {
+		t.Errorf("数据库文件应在 %q: %v", filepath.Join(dir, "pool.db"), err)
+	}
+	// 父目录下不应出现被截断的意外文件。
+	ents, _ := os.ReadDir(root)
+	for _, e := range ents {
+		if !e.IsDir() {
+			t.Errorf("根目录不应出现意外文件: %s", e.Name())
+		}
+	}
+}
+
+func TestOpenPragmasApplied(t *testing.T) {
+	// 连接串的 pragma 必须真正生效（WAL、外键）。
+	db, err := Open(filepath.Join(t.TempDir(), "pragma.db"))
+	if err != nil {
+		t.Fatalf("Open() 失败: %v", err)
+	}
+	defer db.Close()
+
+	var journalMode string
+	if err := db.QueryRow("PRAGMA journal_mode").Scan(&journalMode); err != nil {
+		t.Fatalf("查询 journal_mode 失败: %v", err)
+	}
+	if journalMode != "wal" {
+		t.Errorf("journal_mode = %q, want wal", journalMode)
+	}
+
+	var fk int
+	if err := db.QueryRow("PRAGMA foreign_keys").Scan(&fk); err != nil {
+		t.Fatalf("查询 foreign_keys 失败: %v", err)
+	}
+	if fk != 1 {
+		t.Errorf("foreign_keys = %d, want 1", fk)
 	}
 }
 

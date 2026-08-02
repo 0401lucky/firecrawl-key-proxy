@@ -19,9 +19,14 @@ var schemaSQL string
 
 // Open 打开（必要时创建）SQLite 数据库并幂等执行 schema。
 //
-// 连接串使用 WAL 模式：读写互不阻塞，代理路径上的读不会被面板的写卡住；
-// busy_timeout 让瞬时并发写排队而不是直接报 database is locked；
-// foreign_keys 让 job_routes 的 ON DELETE CASCADE 真正生效。
+// 连接串用「裸路径 + 查询参数」，不加 file: 前缀：加了 file: 会进入 SQLite URI
+// 解析模式，路径中的 # 会被当作 URI 片段分隔符，数据库会静默落到截断后的
+// 错误路径（Go 子测试的临时目录名含 #01 时就触发过，数据落盘位置错误且
+// 难以排查）。modernc 自己解析 ? 之后的 _pragma 参数，不依赖 file: 前缀
+//（见 modernc.org/sqlite/dsn_test.go）。
+//
+// 参数：WAL 读写互不阻塞；busy_timeout 让瞬时并发写排队而不是直接报
+// database is locked；foreign_keys 让 job_routes 的 ON DELETE CASCADE 生效。
 func Open(path string) (*sql.DB, error) {
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -29,7 +34,7 @@ func Open(path string) (*sql.DB, error) {
 		}
 	}
 	dsn := fmt.Sprintf(
-		"file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)",
+		"%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)",
 		path,
 	)
 	db, err := sql.Open("sqlite", dsn)

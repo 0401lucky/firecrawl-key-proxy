@@ -2,11 +2,11 @@
 
 ## 驱动与连接串
 
-驱动固定为 `modernc.org/sqlite`（纯 Go，`CGO_ENABLED=0` 可构建）。连接串：
+驱动固定为 `modernc.org/sqlite`（纯 Go，`CGO_ENABLED=0` 可构建）。连接串**不加 `file:` 前缀**：
 
 ```go
 dsn := fmt.Sprintf(
-    "file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)",
+    "%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)",
     path,
 )
 ```
@@ -15,12 +15,18 @@ dsn := fmt.Sprintf(
 - busy_timeout：瞬时并发写排队，不直接抛 `database is locked`。
 - foreign_keys：`job_routes` 的 `ON DELETE CASCADE` 才真正生效。
 
+> **Warning**：不要加 `file:` 前缀。加了会进入 SQLite URI 解析模式，路径中的 `#`
+> 被当作 URI 片段分隔符，数据库静默落到截断后的错误文件——Go 子测试临时目录名
+> 含 `#01` 时就触发过，数据落盘位置错误且极难排查。modernc 自己解析 `?` 之后的
+> 参数（见 modernc.org/sqlite/dsn_test.go），裸路径形式是官方用法。
+>
+> 另外 `?` 之后的查询串在 modernc 里也是它自己解析的，`file:` 前缀不是必需的。
+
 **不要** `db.SetMaxOpenConns(1)`——WAL 下多读一写安全，限制单连接牺牲读并发。
 写操作靠 busy_timeout 排队。
 
-> **Warning**：modernc 驱动与 mattn/go-sqlite3 的 pragma 语法不同。若 `_pragma=`
-> 写法报错，改为打开后显式 `PRAGMA journal_mode=WAL;`。不要因此换回 CGO 驱动，
-> 那会破坏 Docker 精简镜像目标。
+> **Warning**：若 `_pragma=` 写法报错，改为打开后显式 `PRAGMA journal_mode=WAL;`。
+> 不要因此换回 CGO 驱动，那会破坏 Docker 精简镜像目标。
 
 ## 时间表示
 
