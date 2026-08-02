@@ -98,8 +98,8 @@ func (p *Pool) next(exclude []int64) (*store.UpstreamKey, error) {
 	p.mu.Lock()
 	now := p.clock.Now()
 	var (
-		cands         []*entry
-		pendingRecovery []*entry // 惰性恢复的条目，锁外落库
+		cands           []*entry
+		pendingRecovery []store.UpstreamKey // 惰性恢复的副本，锁外落库
 	)
 	for _, e := range p.keys {
 		uk := &e.uk
@@ -116,7 +116,7 @@ func (p *Pool) next(exclude []int64) (*store.UpstreamKey, error) {
 			// 冷却到期：惰性恢复为 available。
 			uk.State = store.StateAvailable
 			uk.CooldownUntil = nil
-			pendingRecovery = append(pendingRecovery, e)
+			pendingRecovery = append(pendingRecovery, *uk)
 		default: // exhausted / invalid
 			continue
 		}
@@ -130,16 +130,19 @@ func (p *Pool) next(exclude []int64) (*store.UpstreamKey, error) {
 	}
 	idx := p.cursor % len(cands)
 	p.cursor++
-	chosen := cands[idx]
+	// 返回副本而非 &chosen.uk：调用方会在锁外长时间持有它（转发期间读 APIKey），
+	// 而 Report/SetCredits/面板 PATCH 会并发改同一结构体。交出内部指针等于
+	// 把池的权威状态暴露到锁外，构成数据竞争。
+	chosen := cands[idx].uk
 	p.mu.Unlock()
 
 	// 锁外落库惰性恢复的状态变更（不阻塞选择路径）。
-	for _, e := range pendingRecovery {
-		if err := p.repo.Update(&e.uk); err != nil {
-			slog.Error("冷却恢复写库失败", "key_id", e.uk.ID, "error", err.Error())
+	for i := range pendingRecovery {
+		if err := p.repo.Update(&pendingRecovery[i]); err != nil {
+			slog.Error("冷却恢复写库失败", "key_id", pendingRecovery[i].ID, "error", err.Error())
 		}
 	}
-	return &chosen.uk, nil
+	return &chosen, nil
 }
 
 // Report 依据一次上游请求的结果更新该 Key 的状态，并同步写 DB。
@@ -202,14 +205,16 @@ func (p *Pool) Flush() error {
 	return p.repo.IncrementUsage(usage)
 }
 
-// GetByID 按 id 返回内存中的上游 Key（运行时权威副本）。
-// 用于 job 粘连等需要「按 id 取 Key」的场景；Key 已被删除时返回 ErrNoKeyAvailable。
+// GetByID 按 id 返回内存中上游 Key 的副本（运行时权威的快照）。
+// 返回副本而非内部指针：调用方（面板 PATCH、job 粘连）会在锁外读写它，
+// 交出内部指针会让这些修改绕过锁直接改动池状态。
 func (p *Pool) GetByID(keyID int64) (*store.UpstreamKey, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, e := range p.keys {
 		if e.uk.ID == keyID {
-			return &e.uk, nil
+			cp := e.uk
+			return &cp, nil
 		}
 	}
 	return nil, ErrNoKeyAvailable
@@ -250,7 +255,7 @@ func (p *Pool) Snapshot() ([]KeySnapshot, map[store.KeyState]int) {
 	now := p.clock.Now()
 	keys := make([]KeySnapshot, 0, len(p.keys))
 	counts := make(map[store.KeyState]int)
-	var pendingRecovery []*entry // 惰性恢复的条目，锁外落库
+	var pendingRecovery []store.UpstreamKey // 惰性恢复的副本，锁外落库
 	for _, e := range p.keys {
 		uk := &e.uk
 		ks := KeySnapshot{Key: *uk}
@@ -260,7 +265,7 @@ func (p *Pool) Snapshot() ([]KeySnapshot, map[store.KeyState]int) {
 				// 让面板下一次轮询即看到真实状态，而非等请求触发。
 				uk.State = store.StateAvailable
 				uk.CooldownUntil = nil
-				pendingRecovery = append(pendingRecovery, e)
+				pendingRecovery = append(pendingRecovery, *uk)
 				ks.Key = *uk
 			} else {
 				ks.CooldownRemaining = int64(uk.CooldownUntil.Sub(now).Seconds())
@@ -272,9 +277,9 @@ func (p *Pool) Snapshot() ([]KeySnapshot, map[store.KeyState]int) {
 	p.mu.Unlock()
 
 	// 锁外落库惰性恢复的状态变更（不阻塞快照路径）。
-	for _, e := range pendingRecovery {
-		if err := p.repo.Update(&e.uk); err != nil {
-			slog.Error("冷却恢复写库失败", "key_id", e.uk.ID, "error", err.Error())
+	for i := range pendingRecovery {
+		if err := p.repo.Update(&pendingRecovery[i]); err != nil {
+			slog.Error("冷却恢复写库失败", "key_id", pendingRecovery[i].ID, "error", err.Error())
 		}
 	}
 	return keys, counts

@@ -60,9 +60,12 @@ docker compose ps          # 等 proxy 变 healthy
 docker compose --profile tls up -d
 ```
 
-不想用内置 Caddy：编辑 `docker-compose.yml`，把 proxy 服务的 `expose` 换成
-`ports: ["127.0.0.1:8080:8080"]`，再由你的 Nginx/Caddy 反代到 `127.0.0.1:8080`。
-默认不把端口绑到 `0.0.0.0`，就是防止面板明文密码裸奔在公网。
+不想用内置 Caddy：proxy 已把端口绑在宿主机的 `127.0.0.1:8080`，直接让你的
+Nginx/Caddy 反代到它即可。端口号可用 `HOST_PORT` 环境变量改。
+
+默认只绑回环地址、不绑 `0.0.0.0`，是为了防止面板登录的明文密码裸奔在公网。
+确需局域网内其他机器直连时，把 `docker-compose.yml` 里的映射改成
+`"0.0.0.0:8080:8080"`——但那样面板走的是明文 HTTP，只在可信内网这么做。
 
 ## 客户端接入
 

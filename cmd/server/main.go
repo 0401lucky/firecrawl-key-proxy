@@ -117,8 +117,6 @@ func run(ctx context.Context) error {
 	// SPA 静态资源兜底（最低优先级，最长前缀匹配保证它最后命中）。
 	mux.Handle("/", webui.Handler())
 
-	_ = st
-
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
 		Handler:           mux,

@@ -8,6 +8,7 @@ package proxy
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io"
@@ -40,6 +41,9 @@ var hopByHopHeaders = map[string]struct{}{
 
 // 响应体缓冲上限（URL 重写 / job 提取用），超限则放弃处理、原样透传。
 const maxResponseBuffer = 32 << 20 // 32 MiB
+
+// 重写后重新压缩的体积下限：小响应压缩收益不抵开销。
+const gzipMinSize = 1 << 10 // 1 KiB
 
 // Handler 是代理转发处理器。所有字段只读，并发安全。
 type Handler struct {
@@ -254,6 +258,14 @@ func (h *Handler) forward(r *http.Request, body io.Reader, contentLength int64, 
 		if isHopByHop(k) || k == "Authorization" || k == "Host" {
 			continue
 		}
+		// 需要解析响应体的路径不透传 Accept-Encoding：
+		// Go 的 Transport 只有在调用方未显式设置该头时才会自动协商 gzip 并
+		// 透明解压。若把客户端的 Accept-Encoding 原样带上，resp.Body 就是压缩
+		// 字节，JSON 解析必然失败 → url/next 不被重写、job 映射不被记录，
+		// 而且是静默失败（响应仍是 200）。官方 Python/Node SDK 默认都发 gzip。
+		if k == "Accept-Encoding" && respNeedsRewrite(r.URL.Path) {
+			continue
+		}
 		for _, v := range vs {
 			req.Header.Add(k, v)
 		}
@@ -282,6 +294,8 @@ func (h *Handler) deliver(
 	defer resp.Body.Close()
 
 	// 需要缓冲响应体的判定：JSON + 命中需重写集合。
+	// 该路径上 forward 已剔除客户端的 Accept-Encoding，故 resp.Body 是明文
+	// （Go 透明解压并移除了 Content-Encoding）。
 	if respNeedsRewrite(r.URL.Path) && isJSONResponse(resp) {
 		body, ok := h.bufferResponse(resp)
 		if ok {
@@ -290,9 +304,21 @@ func (h *Handler) deliver(
 				h.recordJobRoute(jobID, r.URL.Path, key.ID)
 			}
 			copyResponseHeaders(w.Header(), resp.Header)
-			w.Header().Set("Content-Length", strconv.Itoa(len(rewritten)))
+			// 上游若仍带 Content-Encoding（我们已不请求压缩，属异常），
+			// 此时 body 已是明文，必须清掉以免客户端按压缩解读。
+			w.Header().Del("Content-Encoding")
+			// 按客户端原本的偏好重新压缩：crawl 状态响应可达 10 MiB，
+			// 直接发明文会显著增加代理到客户端的带宽。
+			out := rewritten
+			if clientAcceptsGzip(r) && len(out) >= gzipMinSize {
+				if gz, err := gzipBytes(out); err == nil {
+					out = gz
+					w.Header().Set("Content-Encoding", "gzip")
+				}
+			}
+			w.Header().Set("Content-Length", strconv.Itoa(len(out)))
 			w.WriteHeader(resp.StatusCode)
-			w.Write(rewritten)
+			w.Write(out)
 			return
 		}
 		h.logger.Warn("响应体超限，放弃重写与 job 提取，原样透传",
@@ -326,7 +352,9 @@ func (h *Handler) stickyPath(w http.ResponseWriter, r *http.Request, jr *store.J
 			"转发上游失败："+netErr.Error(), nil)
 		return
 	}
-	// 不调用 pool.Report()：见函数注释。
+	// 不调用 pool.Report()：见函数注释。但仍计入调用数，
+	// 否则面板的「累计调用数」会漏掉全部 job 轮询请求。
+	h.pool.RecordUsage(key.ID)
 	h.deliver(w, r, resp, key, keypool.Outcome{StatusCode: resp.StatusCode})
 	h.logRequest(r, key, resp.StatusCode, 0, start, nil)
 }
@@ -394,6 +422,31 @@ func (h *Handler) logRequest(
 
 // ---- 工具函数 ----
 
+// clientAcceptsGzip 判断客户端是否接受 gzip 编码。
+func clientAcceptsGzip(r *http.Request) bool {
+	for _, part := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+		// 去掉 q 值后比对编码名，如 "gzip;q=0.8"。
+		name := strings.TrimSpace(strings.SplitN(part, ";", 2)[0])
+		if strings.EqualFold(name, "gzip") {
+			return true
+		}
+	}
+	return false
+}
+
+// gzipBytes 压缩字节切片。
+func gzipBytes(b []byte) ([]byte, error) {
+	var out bytes.Buffer
+	zw := gzip.NewWriter(&out)
+	if _, err := zw.Write(b); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
 func isHopByHop(header string) bool {
 	_, ok := hopByHopHeaders[http.CanonicalHeaderKey(header)]
 	return ok
@@ -442,11 +495,13 @@ func parseRetryAfter(resp *http.Response) time.Duration {
 }
 
 // writeJSONError 输出统一的 JSON 错误体（父任务 design §9 契约）。
+// detail 期望是 map[store.KeyState]int（各状态的 Key 计数）；类型不符时
+// 只是省略 detail，不 panic——错误路径本身不该成为新的故障源。
 func writeJSONError(w http.ResponseWriter, status int, code, msg string, detail any) {
 	body := map[string]any{"error": code, "message": msg}
-	if detail != nil {
-		d := map[string]int{}
-		for k, v := range detail.(map[store.KeyState]int) {
+	if counts, ok := detail.(map[store.KeyState]int); ok {
+		d := make(map[string]int, len(counts))
+		for k, v := range counts {
 			d[string(k)] = v
 		}
 		body["detail"] = d
