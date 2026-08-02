@@ -627,13 +627,15 @@ func TestAC14_HealthzNoAuth(t *testing.T) {
 func TestSPAFallback(t *testing.T) {
 	mux, _, _ := setupFullStack(t)
 
-	// 前端路由路径 → index.html。
+	// 前端路由路径 → index.html（占位页或 C6 真实 SPA 产物均可）。
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/keys", nil)
 	mux.ServeHTTP(rec, req)
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "index.html") &&
-		!strings.Contains(rec.Body.String(), "Firecrawl 管理面板") {
-		t.Errorf("/keys 应回退 index.html, got %d %s", rec.Code, rec.Body.String())
+	body := rec.Body.String()
+	isSPA := strings.Contains(body, `<div id="app"></div>`)
+	isPlaceholder := strings.Contains(body, "Firecrawl 管理面板")
+	if rec.Code != 200 || (!isSPA && !isPlaceholder) {
+		t.Errorf("/keys 应回退 index.html, got %d %s", rec.Code, body)
 	}
 
 	// 代理前缀未匹配路由 → 404 而非 HTML（SPA 兜底不得吃掉 API 404）。

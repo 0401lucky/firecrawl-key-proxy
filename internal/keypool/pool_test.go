@@ -334,6 +334,30 @@ func TestSnapshotCounts(t *testing.T) {
 	}
 }
 
+// Snapshot 对已过期的冷却做惰性恢复（面板轮询即可看到真实状态，无需等请求触发）。
+func TestSnapshotLazyRecoversExpiredCooling(t *testing.T) {
+	pool, st, clock := setupPool(t, 1)
+
+	pool.Report(1, Outcome{StatusCode: 429, RetryAfter: 10 * time.Second})
+	clock.Advance(11 * time.Second) // 冷却已过期，但无任何请求触发 next()
+
+	keys, counts := pool.Snapshot()
+	if counts[store.StateCooling] != 0 {
+		t.Errorf("过期冷却 counts[cooling] = %d, want 0", counts[store.StateCooling])
+	}
+	if counts[store.StateAvailable] != 1 {
+		t.Errorf("过期冷却 counts[available] = %d, want 1", counts[store.StateAvailable])
+	}
+	if keys[0].CooldownRemaining != 0 {
+		t.Errorf("过期冷却剩余 = %d, want 0", keys[0].CooldownRemaining)
+	}
+	// DB 已同步落库。
+	uk := mustGet(t, st, 1)
+	if uk.State != store.StateAvailable || uk.CooldownUntil != nil {
+		t.Errorf("Snapshot 恢复后 DB state = %q cooldown=%v, want available + nil", uk.State, uk.CooldownUntil)
+	}
+}
+
 // ---- Reload ----
 
 func TestReloadPicksUpNewKey(t *testing.T) {

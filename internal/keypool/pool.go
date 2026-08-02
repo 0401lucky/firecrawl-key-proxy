@@ -246,23 +246,36 @@ type KeySnapshot struct {
 // 供面板展示与 C3 构造 503 错误体使用。
 func (p *Pool) Snapshot() ([]KeySnapshot, map[store.KeyState]int) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 
 	now := p.clock.Now()
 	keys := make([]KeySnapshot, 0, len(p.keys))
 	counts := make(map[store.KeyState]int)
+	var pendingRecovery []*entry // 惰性恢复的条目，锁外落库
 	for _, e := range p.keys {
-		uk := e.uk
-		ks := KeySnapshot{Key: uk}
+		uk := &e.uk
+		ks := KeySnapshot{Key: *uk}
 		if uk.State == store.StateCooling && uk.CooldownUntil != nil {
-			rem := int64(uk.CooldownUntil.Sub(now).Seconds())
-			if rem < 0 {
-				rem = 0
+			if now.After(*uk.CooldownUntil) {
+				// 冷却到期：惰性恢复为 available（同 next()），
+				// 让面板下一次轮询即看到真实状态，而非等请求触发。
+				uk.State = store.StateAvailable
+				uk.CooldownUntil = nil
+				pendingRecovery = append(pendingRecovery, e)
+				ks.Key = *uk
+			} else {
+				ks.CooldownRemaining = int64(uk.CooldownUntil.Sub(now).Seconds())
 			}
-			ks.CooldownRemaining = rem
 		}
 		keys = append(keys, ks)
 		counts[uk.State]++
+	}
+	p.mu.Unlock()
+
+	// 锁外落库惰性恢复的状态变更（不阻塞快照路径）。
+	for _, e := range pendingRecovery {
+		if err := p.repo.Update(&e.uk); err != nil {
+			slog.Error("冷却恢复写库失败", "key_id", e.uk.ID, "error", err.Error())
+		}
 	}
 	return keys, counts
 }

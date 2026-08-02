@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply bg-slate-100 text-slate-800;
+    @apply dark:bg-ink dark:text-slate-200;
+  }
+  /* 数据一律等宽、表格数字对齐 */
+  .num {
+    @apply font-mono tabular-nums;
+  }
+  ::selection {
+    @apply bg-amber-300/70 text-black;
+  }
+}
+
+/* 精密仪表的点状网格背景 */
+.bg-instrument {
+  background-image: radial-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.dark .bg-instrument {
+  background-image: radial-gradient(rgba(56, 198, 217, 0.07) 1px, transparent 1px);
+}
