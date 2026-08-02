@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"firecrawl-proxy/internal/auth"
 	"firecrawl-proxy/internal/keypool"
 	"firecrawl-proxy/internal/logging"
 	"firecrawl-proxy/internal/store"
@@ -369,6 +370,7 @@ func (h *Handler) logRequest(
 	attrs := []any{
 		"method", r.Method,
 		"path", r.URL.Path,
+		"proxy_key", auth.ProxyKeyNameFrom(r.Context()),
 		"upstream_key", logging.MaskKey(key.APIKey),
 		"upstream_status", status,
 		"failover_count", attempt,

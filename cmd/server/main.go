@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"firecrawl-proxy/internal/auth"
 	"firecrawl-proxy/internal/config"
 	"firecrawl-proxy/internal/keypool"
 	"firecrawl-proxy/internal/logging"
@@ -84,15 +85,20 @@ func run(ctx context.Context) error {
 	}
 	go proxyHandler.StartCleanup(ctx)
 
+	proxyAuth := auth.NewProxyKeyAuth(st.ProxyKeys)
+	go proxyAuth.Run(ctx)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	})
-	// 代理转发路径：按前缀挂载。认证中间件（C4）届时包在最外层。
+	// 代理转发路径：按前缀挂载，外层包代理 Key 认证中间件（AC7/AC13）。
+	// 中间件只覆盖代理前缀，/healthz 与 /api/admin/* 不受影响。
+	authedProxy := proxyAuth.Middleware(proxyHandler)
 	for _, p := range cfg.ProxyPathPrefixes {
-		mux.Handle(p, proxyHandler)
+		mux.Handle(p, authedProxy)
 	}
 
 	// 后续子任务（C5 面板、C6 静态资源）在此注册路由。
@@ -125,9 +131,12 @@ func run(ctx context.Context) error {
 		logger.Error("HTTP 服务关闭超时", "error", err.Error())
 	}
 
-	// 先冲刷内存中的用量计数，再关闭数据库（顺序不可颠倒）。
+	// 先冲刷内存中的用量计数（上游 Key 池 + 代理 Key），再关闭数据库（顺序不可颠倒）。
 	if err := pool.Flush(); err != nil {
 		logger.Error("退出前刷盘失败", "error", err.Error())
+	}
+	if err := proxyAuth.Flush(); err != nil {
+		logger.Error("代理 Key 退出前刷盘失败", "error", err.Error())
 	}
 	logger.Info("服务已退出")
 	return nil
