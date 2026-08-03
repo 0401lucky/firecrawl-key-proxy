@@ -22,12 +22,18 @@ class Proxy:
     password: str    # 可能为空
 
     def camofox_dict(self) -> dict | None:
-        """转 Camoufox/Playwright 的 proxy 参数；无凭据时省略 username/password。"""
+        """转 Camoufox/Playwright 的 proxy 参数。
+
+        注意：空 username 必须省略该键（Playwright 传 username="" 会
+        PROXY_GATEWAY_TIMEOUT），只传 password 时 resin 等代理正常认证。
+        """
         if not self.server:
             return None
         proxy = {"server": self.server}
         if self.username:
             proxy["username"] = self.username
+            proxy["password"] = self.password
+        elif self.password:
             proxy["password"] = self.password
         return proxy
 

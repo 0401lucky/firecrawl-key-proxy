@@ -321,16 +321,30 @@ def register_with_browser(email: str, password: str, proxy: Proxy | None = None,
             signup_events = attach_signup_feedback_tracker(page)
             verify_url = ""
 
-            # 1. 进入注册页
+            # 1. 进入注册页（人类化：随机停留 + 滚动，降低 reCAPTCHA 自动化评分）
             page.goto("https://firecrawl.dev/", wait_until="networkidle", timeout=30000)
-            time.sleep(2)
+            time.sleep(random.uniform(3, 6))
+            try:
+                page.mouse.wheel(0, random.randint(200, 500))
+                time.sleep(random.uniform(1, 2.5))
+                page.mouse.wheel(0, random.randint(-200, 300))
+            except Exception:
+                pass
             for selector in ('a:has-text("Sign up")', 'a:has-text("Sign Up")',
                              'button:has-text("Sign up")', 'a[href*="signup"]',
                              'a[href*="register"]'):
                 if page.query_selector(selector):
                     page.click(selector)
-                    time.sleep(3)
+                    time.sleep(random.uniform(2.5, 4.5))
                     break
+            # 注册页停留 + 滚动（人类行为特征）
+            try:
+                page.mouse.wheel(0, random.randint(300, 700))
+                time.sleep(random.uniform(1.5, 3))
+                page.mouse.wheel(0, random.randint(-300, 200))
+                time.sleep(random.uniform(0.8, 1.8))
+            except Exception:
+                pass
 
             # 2. 填表（type 逐字符输入模拟真人，随机停顿后提交）
             email_selector = fill_first_input(
