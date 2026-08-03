@@ -75,6 +75,7 @@ curl -X POST http://127.0.0.1:8899/register -d '{"count": 3, "concurrency": 2}'
 | status | 含义 | 是否换代理重试 |
 |---|---|---|
 | ok | 注册成功，Key 已验证/已上传 | - |
+| verify_failed | Key 提取成功但真实调用 401/403/402，**不上传**（落盘留档） | ❌ |
 | blocked | Firecrawl 风控（Security check failed） | ✅ |
 | stalled | 提交后停留在注册页 | ✅ |
 | error | 浏览器/网络异常 | ✅（连接类错误会把该代理列入黑名单） |

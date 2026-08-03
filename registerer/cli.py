@@ -67,10 +67,10 @@ def register_one(index: int, total: int, saver: AccountSaver, upload: bool,
         result = RegisterResult(None, "error", "未知错误")
 
     if result.api_key:
-        saver.save(email, password, result.api_key, "ok")
-        if upload:
+        saver.save(email, password, result.api_key, result.status)
+        if upload and result.status == "ok":
             name = f"auto-{email.split('@')[0]}"
-            upload_key(name, result.api_key)
+            upload_key(name, result.api_key, proxy=proxy)
     else:
         saver.save(email, password, "", result.status)
     print(f"=== [{index}/{total}] 结束：{result.status} ===")

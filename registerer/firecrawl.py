@@ -235,6 +235,71 @@ def verify_api_key(api_key: str, proxy: Proxy | None = None, timeout: int = API_
     return False
 
 
+# ---- 引导页（onboarding）处理 ----
+
+
+def handle_onboarding(page, max_steps: int = 6) -> bool:
+    """完成注册后的引导页（Email Verified → heard_about → about_you）。
+
+    实测收益：完成引导 +25 credits，并开启 Milestones 面板（后续可再赚）。
+    社交任务（GitHub star 等，需真实账号）不处理。返回 True 表示已离开 onboarding。
+    """
+    try:
+        for step in range(1, max_steps + 1):
+            time.sleep(3)
+            url = (page.url or "")
+            if "onboarding" not in url:
+                return True
+
+            if "heard_about" in url:
+                # 从哪听说：选 Other 或 Skip
+                for sel in ('text="Other"', 'button:has-text("Skip")'):
+                    try:
+                        page.click(sel, timeout=5000)
+                        time.sleep(2)
+                        break
+                    except Exception:
+                        continue
+
+            if "about_you" in url:
+                # 角色：Developer / Engineer；ToS：aria-label 开关按钮
+                for sel in ('text="Developer / Engineer"',
+                            'div:has-text("Developer / Engineer")'):
+                    try:
+                        page.click(sel, timeout=5000)
+                        time.sleep(2)
+                        break
+                    except Exception:
+                        continue
+                try:
+                    page.click('button[aria-label*="I agree to"]', timeout=5000)
+                    time.sleep(2)
+                except Exception:
+                    pass
+
+            # 下一步按钮（排除 Continue with GitHub/Google）
+            next_btn = None
+            for sel in ('button:has-text("Continue")', 'button:has-text("Finish")',
+                        'button:has-text("Get started")'):
+                for el in page.query_selector_all(sel):
+                    t = (el.text_content() or "").strip()
+                    if t and "Continue with" not in t:
+                        next_btn = el
+                        break
+                if next_btn:
+                    break
+            if not next_btn:
+                return True
+            try:
+                next_btn.click()
+                time.sleep(4)
+            except Exception:
+                return True
+        return "onboarding" not in (page.url or "")
+    except Exception:
+        return "onboarding" not in (page.url or "")
+
+
 # ---- 主流程 ----
 
 def register_with_browser(email: str, password: str, proxy: Proxy | None = None,
@@ -297,6 +362,15 @@ def register_with_browser(email: str, password: str, proxy: Proxy | None = None,
             page.goto(verify_url, wait_until="networkidle", timeout=60000)
             time.sleep(5)
 
+            # 5.1 完成引导页（Email Verified / heard_about / about_you）
+            # 验证链接直接带入登录态，此时通常停在 onboarding；完成可 +25 credits。
+            try:
+                if "onboarding" in (page.url or ""):
+                    print("🎯 检测到引导页，自动完成...")
+                    handle_onboarding(page)
+            except Exception:
+                pass
+
             # 6. 若跳登录页则自动登录
             current_url = (page.url or "").lower()
             if "login" in current_url or "signin" in current_url:
@@ -350,8 +424,9 @@ def register_with_browser(email: str, password: str, proxy: Proxy | None = None,
             # 8. 验证 Key
             verify = verify_api_key(api_key, proxy=proxy)
             if verify is False:
-                return RegisterResult(api_key, "ok",
-                                      "Key 已提取但真实调用验证失败（可能未激活）")
+                # Key 已提取但真实调用失败（401/403/402）：不上传，落盘留档。
+                return RegisterResult(api_key, "verify_failed",
+                                      "Key 已提取但真实调用验证失败（可能未激活或被风控）")
             return RegisterResult(api_key, "ok", "")
 
     except Exception as exc:
