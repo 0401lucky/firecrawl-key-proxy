@@ -61,4 +61,18 @@ const (
 func (r *UpstreamKeyRepo) IncrementUsage(usage map[int64]int64) error
 ```
 
+- **按时间维度的统计用「小时桶聚合表」而非请求明细**（`call_stats_buckets`，2026-08
+  调用数据面板）：主键 `(hour, upstream_key_id, status_class)`，calls 计数；
+  内存缓冲 + 10s 批量 `INSERT ... ON CONFLICT DO UPDATE SET calls = calls + excluded.calls`。
+  好处：存储量级极小（31 天 ≈ 几 K 行）、查询天然聚合、删 Key 级联清除（ON DELETE
+  CASCADE）。时间粒度不够时再加明细表，不要先建明细再聚合。
+
+- 统计口径与计数口径必须一致：`RecordCall` 与 `RecordUsage` 在 proxy handler 同位调用，
+  网络错误都不计入（`netErr != nil` 时不调）。跨层不同步会让「总调用 ≈ Σ request_count」
+  的验收断言失效。
+
+- 窗口查询的「下界」必须与 series 起点一致：
+  `start = nowHour - (windowHours-1)*3600`，正好 N 个点且含当前部分小时；
+  若用 `now - window` 截断，会多算一个旧桶，total/success_rate 与图表不一致。
+
 - 面板增删 Key：写 DB 后触发内存池重载（keypool 是运行时权威，DB 是持久化副本）。
