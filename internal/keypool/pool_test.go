@@ -54,6 +54,7 @@ func setupPool(t *testing.T, n int) (*Pool, *store.Store, *fakeClock) {
 	pool, err := New(st.UpstreamKeys, clock, Config{
 		DefaultCooldown: 60 * time.Second,
 		FlushInterval:   10 * time.Second,
+		StatsRepo:       st.CallStats,
 	})
 	if err != nil {
 		t.Fatalf("New() 失败: %v", err)
@@ -468,6 +469,138 @@ func TestRecordUsageVisibleInSnapshot(t *testing.T) {
 	keys, _ = pool.Snapshot()
 	if got := keys[0].Key.RequestCount; got != 3 {
 		t.Errorf("Reload 后 Snapshot 调用数 = %d, want 3（不得翻倍）", got)
+	}
+}
+
+// ---- 调用统计（RecordCall → Flush → 落库）----
+
+// RecordCall 后 Flush：不同状态码落入对应类别桶，同一小时合并。
+func TestRecordCallFlush(t *testing.T) {
+	pool, st, clock := setupPool(t, 1)
+
+	pool.RecordCall(1, 200)
+	pool.RecordCall(1, 404)
+	pool.RecordCall(1, 500)
+	pool.RecordCall(1, 201)
+
+	if err := pool.Flush(); err != nil {
+		t.Fatalf("Flush() 失败: %v", err)
+	}
+	hour := clock.Now().Truncate(time.Hour).Unix()
+	rows, err := st.CallStats.QueryWindow(hour)
+	if err != nil {
+		t.Fatalf("QueryWindow 失败: %v", err)
+	}
+	want := map[int]int64{store.StatusClass2xx: 2, store.StatusClass4xx: 1, store.StatusClass5xx: 1}
+	if len(rows) != len(want) {
+		t.Fatalf("桶数 = %d, want %d（%+v）", len(rows), len(want), rows)
+	}
+	for _, r := range rows {
+		if r.Calls != want[r.StatusClass] {
+			t.Errorf("class %d calls = %d, want %d", r.StatusClass, r.Calls, want[r.StatusClass])
+		}
+	}
+}
+
+// 跨小时边界：两次调用落入不同小时的桶。
+func TestRecordCallHourBucket(t *testing.T) {
+	pool, st, clock := setupPool(t, 1)
+
+	pool.RecordCall(1, 200)
+	clock.Advance(time.Hour)
+	pool.RecordCall(1, 200)
+
+	if err := pool.Flush(); err != nil {
+		t.Fatalf("Flush() 失败: %v", err)
+	}
+	h1 := clock.Now().Truncate(time.Hour).Unix() - 3600
+	rows, err := st.CallStats.QueryWindow(h1)
+	if err != nil {
+		t.Fatalf("QueryWindow 失败: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("桶数 = %d, want 2（跨小时应分桶）", len(rows))
+	}
+}
+
+// 状态类别映射表驱动：2xx/3xx/4xx/5xx 各归其类。
+func TestRecordCallStatusClass(t *testing.T) {
+	cases := []struct {
+		code  int
+		class int
+	}{
+		{200, store.StatusClass2xx},
+		{201, store.StatusClass2xx},
+		{299, store.StatusClass2xx},
+		{302, store.StatusClass3xx},
+		{399, store.StatusClass3xx},
+		{400, store.StatusClass4xx},
+		{404, store.StatusClass4xx},
+		{499, store.StatusClass4xx},
+		{500, store.StatusClass5xx},
+		{503, store.StatusClass5xx},
+		{600, store.StatusClass5xx},
+	}
+	pool, st, _ := setupPool(t, 1)
+	for _, c := range cases {
+		pool.RecordCall(1, c.code)
+	}
+	if err := pool.Flush(); err != nil {
+		t.Fatalf("Flush() 失败: %v", err)
+	}
+	hour := time.Unix(1_700_000_000, 0).Truncate(time.Hour).Unix()
+	rows, err := st.CallStats.QueryWindow(hour)
+	if err != nil {
+		t.Fatalf("QueryWindow 失败: %v", err)
+	}
+	if len(rows) != 4 {
+		t.Fatalf("类别数 = %d, want 4（11 个状态码归 4 类）", len(rows))
+	}
+	for _, r := range rows {
+		expected := 0
+		for _, c := range cases {
+			if c.class == r.StatusClass {
+				expected++
+			}
+		}
+		if int(r.Calls) != expected {
+			t.Errorf("class %d calls = %d, want %d", r.StatusClass, r.Calls, expected)
+		}
+	}
+}
+
+// 并发 RecordCall：锁内累加不丢数。
+func TestConcurrentRecordCall(t *testing.T) {
+	pool, st, _ := setupPool(t, 1)
+
+	const goroutines = 20
+	const iterations = 50
+	var wg sync.WaitGroup
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				pool.RecordCall(1, 200)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if err := pool.Flush(); err != nil {
+		t.Fatalf("Flush() 失败: %v", err)
+	}
+	hour := time.Unix(1_700_000_000, 0).Truncate(time.Hour).Unix()
+	rows, err := st.CallStats.QueryWindow(hour)
+	if err != nil {
+		t.Fatalf("QueryWindow 失败: %v", err)
+	}
+	var total int64
+	for _, r := range rows {
+		total += r.Calls
+	}
+	if total != goroutines*iterations {
+		t.Errorf("总统计数 = %d, want %d", total, goroutines*iterations)
 	}
 }
 

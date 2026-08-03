@@ -59,13 +59,15 @@ func NewStore(db *sql.DB) *Store {
 		ProxyKeys:    &ProxyKeyRepo{db: db},
 		JobRoutes:    &JobRouteRepo{db: db},
 		Sessions:     &SessionRepo{db: db},
+		CallStats:    &CallStatsRepo{db: db},
 	}
 }
 
-// Store 聚合四个仓储，供上层一次注入。
+// Store 聚合全部仓储，供上层一次注入。
 type Store struct {
 	UpstreamKeys *UpstreamKeyRepo
 	ProxyKeys    *ProxyKeyRepo
 	JobRoutes    *JobRouteRepo
 	Sessions     *SessionRepo
+	CallStats    *CallStatsRepo
 }

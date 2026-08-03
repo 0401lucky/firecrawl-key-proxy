@@ -22,6 +22,15 @@ var ErrNoKeyAvailable = errors.New("没有可用的上游 Key")
 type Config struct {
 	DefaultCooldown time.Duration // 429 无 Retry-After 头时的默认冷却时长
 	FlushInterval   time.Duration // 用量计数批量刷盘间隔
+	StatsRepo       *store.CallStatsRepo // 调用统计桶仓储；nil 时统计只累积不落库（测试可省略）
+}
+
+// statKey 是内存中调用统计桶的唯一键：小时 × 上游 Key × 状态类别。
+// 用结构体而非字符串拼接，避免解析开销与格式漂移。
+type statKey struct {
+	hour    int64
+	keyID   int64
+	class   int
 }
 
 // entry 包裹 store.UpstreamKey，附加内存态字段。
@@ -38,20 +47,24 @@ type Pool struct {
 	mu     sync.Mutex
 	keys   []*entry // 按 id 升序，保证轮询顺序稳定
 	cursor int
-	usage  map[int64]int64 // 待刷盘的调用增量（keyID → 次数）
+	usage  map[int64]int64     // 待刷盘的调用增量（keyID → 次数）
+	stats  map[statKey]int64   // 待刷盘的统计桶增量（hour×key×class → 次数）
 
-	repo  *store.UpstreamKeyRepo
-	clock Clock
-	cfg   Config
+	repo      *store.UpstreamKeyRepo
+	statsRepo *store.CallStatsRepo
+	clock     Clock
+	cfg       Config
 }
 
 // New 从 DB 加载全部上游 Key 构造池。
 func New(repo *store.UpstreamKeyRepo, clock Clock, cfg Config) (*Pool, error) {
 	p := &Pool{
-		repo:  repo,
-		clock: clock,
-		cfg:   cfg,
-		usage: make(map[int64]int64),
+		repo:      repo,
+		statsRepo: cfg.StatsRepo,
+		clock:     clock,
+		cfg:       cfg,
+		usage:     make(map[int64]int64),
+		stats:     make(map[statKey]int64),
 	}
 	if err := p.Reload(); err != nil {
 		return nil, err
@@ -202,18 +215,66 @@ func (p *Pool) RecordUsage(keyID int64) {
 	p.mu.Unlock()
 }
 
-// Flush 把内存中累计的调用增量批量写入 DB 后清空。
-// 先在锁内取走 map，再在锁外执行 DB 写——不持锁做 I/O。
+// RecordCall 累加一次调用统计，由 C3 在请求完成后调用，调用点与 RecordUsage 同位。
+// 按当前时间的小时桶 × 状态类别聚合到内存，Flush 时批量 upsert 到 call_stats_buckets；
+// 不增加每请求一次 DB 写。网络错误不调本方法（与 request_count 口径一致）。
+func (p *Pool) RecordCall(keyID int64, statusCode int) {
+	p.mu.Lock()
+	hour := p.clock.Now().Truncate(time.Hour).Unix()
+	k := statKey{hour: hour, keyID: keyID, class: statusClass(statusCode)}
+	p.stats[k]++
+	p.mu.Unlock()
+}
+
+// statusClass 把 HTTP 状态码映射为聚合类别（见 store.StatusClass*）。
+func statusClass(code int) int {
+	switch {
+	case code >= 200 && code < 300:
+		return store.StatusClass2xx
+	case code >= 300 && code < 400:
+		return store.StatusClass3xx
+	case code >= 400 && code < 500:
+		return store.StatusClass4xx
+	default:
+		return store.StatusClass5xx
+	}
+}
+
+// Flush 把内存中累计的调用增量与统计桶增量批量写入 DB 后清空。
+// 先在锁内取走两个 map，再在锁外执行 DB 写——不持锁做 I/O。
+// 任一失败返回聚合错误（调用方记日志），已取走的增量按既有语义丢弃。
 func (p *Pool) Flush() error {
 	p.mu.Lock()
-	if len(p.usage) == 0 {
-		p.mu.Unlock()
-		return nil
+	var usage map[int64]int64
+	var stats map[statKey]int64
+	if len(p.usage) > 0 {
+		usage = p.usage
+		p.usage = make(map[int64]int64)
 	}
-	usage := p.usage
-	p.usage = make(map[int64]int64)
+	if len(p.stats) > 0 {
+		stats = p.stats
+		p.stats = make(map[statKey]int64)
+	}
 	p.mu.Unlock()
-	return p.repo.IncrementUsage(usage)
+
+	var errs []error
+	if len(usage) > 0 {
+		if err := p.repo.IncrementUsage(usage); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if len(stats) > 0 && p.statsRepo != nil {
+		rows := make([]store.CallStat, 0, len(stats))
+		for k, n := range stats {
+			rows = append(rows, store.CallStat{
+				Hour: k.hour, UpstreamKeyID: k.keyID, StatusClass: k.class, Calls: n,
+			})
+		}
+		if err := p.statsRepo.Increment(rows); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // GetByID 按 id 返回内存中上游 Key 的副本（运行时权威的快照）。

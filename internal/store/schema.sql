@@ -43,6 +43,17 @@ CREATE TABLE IF NOT EXISTS job_routes (
 );
 CREATE INDEX IF NOT EXISTS idx_job_routes_expires ON job_routes(expires_at);
 
+-- 调用统计：按「小时桶 × 上游 Key × 状态类别」聚合，不存请求明细。
+-- 高频写入走内存缓冲 + 批量 upsert 刷盘（同 request_count），避免每请求一次 DB 写。
+CREATE TABLE IF NOT EXISTS call_stats_buckets (
+    hour            INTEGER NOT NULL,  -- unix 秒，对齐到小时起点
+    upstream_key_id INTEGER NOT NULL REFERENCES upstream_keys(id) ON DELETE CASCADE,
+    status_class    INTEGER NOT NULL,  -- 1=2xx 2=3xx 3=4xx 4=5xx
+    calls           INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (hour, upstream_key_id, status_class)
+);
+CREATE INDEX IF NOT EXISTS idx_call_stats_hour ON call_stats_buckets(hour);
+
 -- 面板会话
 CREATE TABLE IF NOT EXISTS admin_sessions (
     token_hash TEXT    PRIMARY KEY,

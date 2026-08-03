@@ -60,3 +60,12 @@ type Session struct {
 	CreatedAt time.Time
 	ExpiresAt time.Time
 }
+
+// 调用统计的状态类别（call_stats_buckets.status_class 取值）。
+// 网络错误 v1 不记录，与 request_count 口径一致。
+const (
+	StatusClass2xx = 1
+	StatusClass3xx = 2
+	StatusClass4xx = 3
+	StatusClass5xx = 4
+)

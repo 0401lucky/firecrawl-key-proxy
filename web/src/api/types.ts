@@ -41,6 +41,32 @@ export interface Overview {
   last_refreshed_at: string | null
 }
 
+/** 调用统计窗口（GET /api/admin/stats 的 window 参数）。 */
+export type StatsWindow = '24h' | '7d' | '30d'
+
+/** 趋势图数据点：某个小时桶的总调用与非 2xx 数。 */
+export interface CallSeriesPoint {
+  ts: number
+  calls: number
+  errors: number
+}
+
+/** 按上游 Key 分布的一行。 */
+export interface PerKeyCall {
+  key_id: number
+  calls: number
+  share: number
+}
+
+/** 调用统计响应，与 internal/admin/stats.go 的 JSON 契约一一对应。 */
+export interface CallStats {
+  window: StatsWindow
+  total_calls: number
+  success_rate: number
+  series: CallSeriesPoint[]
+  per_key: PerKeyCall[]
+}
+
 export interface CreditRefresh {
   credits_total: number
   credits_remaining: number

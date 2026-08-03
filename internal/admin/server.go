@@ -56,6 +56,7 @@ func (s *Server) Router() http.Handler {
 	protected := http.NewServeMux()
 	protected.HandleFunc("POST /api/admin/logout", s.handleLogout)
 	protected.HandleFunc("GET /api/admin/overview", s.handleOverview)
+	protected.HandleFunc("GET /api/admin/stats", s.handleStats)
 	protected.HandleFunc("GET /api/admin/upstream-keys", s.handleListUpstreamKeys)
 	protected.HandleFunc("POST /api/admin/upstream-keys", s.handleCreateUpstreamKey)
 	protected.HandleFunc("PATCH /api/admin/upstream-keys/{id}", s.handlePatchUpstreamKey)

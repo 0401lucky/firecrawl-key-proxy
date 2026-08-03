@@ -1,10 +1,12 @@
 import { reactive } from 'vue'
 import type {
+  CallStats,
   CreditRefresh,
   Overview,
   ProxyKey,
   ProxyKeyCreated,
   SessionStatus,
+  StatsWindow,
   UpstreamKey,
   UpstreamKeyPatch,
 } from './types'
@@ -74,6 +76,8 @@ export const api = {
   logout: () => request<void>('/api/admin/logout', { method: 'POST' }),
 
   overview: () => request<Overview>('/api/admin/overview'),
+  stats: (window: StatsWindow = '24h') =>
+    request<CallStats>(`/api/admin/stats?window=${window}`),
 
   upstreamKeys: () => request<UpstreamKey[]>('/api/admin/upstream-keys'),
   createUpstreamKey: (name: string, apiKey: string) =>

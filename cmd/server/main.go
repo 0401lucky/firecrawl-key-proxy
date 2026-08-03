@@ -67,11 +67,13 @@ func run(ctx context.Context) error {
 	pool, err := keypool.New(st.UpstreamKeys, keypool.RealClock{}, keypool.Config{
 		DefaultCooldown: time.Duration(cfg.DefaultCooldownSec) * time.Second,
 		FlushInterval:   10 * time.Second,
+		StatsRepo:       st.CallStats,
 	})
 	if err != nil {
 		return err
 	}
 	go pool.Run(ctx)
+	go startStatsCleanup(ctx, st.CallStats, logger)
 	logger.Info("上游 Key 池就绪")
 
 	proxyHandler, err := proxy.NewHandler(pool, st.JobRoutes, logger, proxy.Config{
@@ -153,4 +155,35 @@ func run(ctx context.Context) error {
 	}
 	logger.Info("服务已退出")
 	return nil
+}
+
+// callStatsRetention 是调用统计桶的保留时长：31 天，硬编码（MVP 不开放配置）。
+const callStatsRetention = 31 * 24 * time.Hour
+
+// startStatsCleanup 定期清理过期的调用统计桶（保留 31 天）。
+// 启动时清一次，之后每小时一次；与 job 映射清理同模式，ctx 取消即退出。
+// 统计桶数量级极小（≈744×Key 数×4 类），清理不会造成明显写压力。
+func startStatsCleanup(ctx context.Context, repo *store.CallStatsRepo, logger *slog.Logger) {
+	run := func() {
+		cutoff := time.Now().Add(-callStatsRetention).Truncate(time.Hour).Unix()
+		n, err := repo.DeleteBefore(cutoff)
+		if err != nil {
+			logger.Warn("清理过期调用统计失败", "error", err.Error())
+			return
+		}
+		if n > 0 {
+			logger.Info("清理过期调用统计桶", "count", n)
+		}
+	}
+	run()
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			run()
+		case <-ctx.Done():
+			return
+		}
+	}
 }

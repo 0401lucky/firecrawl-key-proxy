@@ -193,6 +193,7 @@ func (h *Handler) forwardLoop(w http.ResponseWriter, r *http.Request) {
 		h.pool.Report(key.ID, outcome)
 		if netErr == nil {
 			h.pool.RecordUsage(key.ID)
+			h.pool.RecordCall(key.ID, statusCode)
 		}
 
 		if !shouldRetry(outcome) || !buffered {
@@ -352,9 +353,10 @@ func (h *Handler) stickyPath(w http.ResponseWriter, r *http.Request, jr *store.J
 			"转发上游失败："+netErr.Error(), nil)
 		return
 	}
-	// 不调用 pool.Report()：见函数注释。但仍计入调用数，
-	// 否则面板的「累计调用数」会漏掉全部 job 轮询请求。
+	// 不调用 pool.Report()：见函数注释。但仍计入调用数与统计，
+	// 否则面板的「累计调用数」与调用数据面板会漏掉全部 job 轮询请求。
 	h.pool.RecordUsage(key.ID)
+	h.pool.RecordCall(key.ID, resp.StatusCode)
 	h.deliver(w, r, resp, key, keypool.Outcome{StatusCode: resp.StatusCode})
 	h.logRequest(r, key, resp.StatusCode, 0, start, nil)
 }
