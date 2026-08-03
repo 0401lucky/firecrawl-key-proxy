@@ -28,6 +28,7 @@ services:
       JOB_ROUTE_TTL_HOURS: ${JOB_ROUTE_TTL_HOURS:-48}
       CREDIT_REFRESH_MINUTES: ${CREDIT_REFRESH_MINUTES:-10}
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
+      REGISTER_TOKEN: ${REGISTER_TOKEN:-}
     volumes:
       - proxy-data:/data
     # 只绑回环地址：本机浏览器能打开面板，公网访问不到。
