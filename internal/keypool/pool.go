@@ -184,10 +184,21 @@ func (p *Pool) Report(keyID int64, o Outcome) {
 	}
 }
 
-// RecordUsage 累加一次调用计数（内存），由 C3 在请求完成后调用。
+// RecordUsage 累加一次调用计数，由 C3 在请求完成后调用。
+// 必须同时做两件事：
+//  1. 累加待刷盘 map（持久化路径：Flush 按固定间隔写 DB）；
+//  2. 累加内存条目自身的 RequestCount（展示路径：面板读 Snapshot）。
+// 只做 1 会让面板的「调用数」停在最近一次 Reload 时的值——Flush 只写 DB、
+// 不搬回内存，而 Reload 仅在面板增删改 Key 时触发（历史 bug）。
 func (p *Pool) RecordUsage(keyID int64) {
 	p.mu.Lock()
 	p.usage[keyID]++
+	for _, e := range p.keys {
+		if e.uk.ID == keyID {
+			e.uk.RequestCount++
+			break
+		}
+	}
 	p.mu.Unlock()
 }
 

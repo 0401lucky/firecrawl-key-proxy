@@ -429,6 +429,48 @@ func TestFlush(t *testing.T) {
 	}
 }
 
+// TestRecordUsageVisibleInSnapshot 是调用数展示的回归测试：
+// RecordUsage 后无需 Flush，Snapshot（面板数据源）立即可见新计数。
+// 曾修 bug：RecordUsage 只进待刷盘 map，面板「调用数」列要等一次 Reload 才跳。
+func TestRecordUsageVisibleInSnapshot(t *testing.T) {
+	pool, st, _ := setupPool(t, 1)
+
+	pool.RecordUsage(1)
+	pool.RecordUsage(1)
+	pool.RecordUsage(1)
+
+	// 未 Flush：Snapshot 立即反映计数。
+	keys, _ := pool.Snapshot()
+	if got := keys[0].Key.RequestCount; got != 3 {
+		t.Errorf("Snapshot 调用数 = %d, want 3（无需等 Flush）", got)
+	}
+	// 未 Flush：DB 仍未落库（持久化由 Flush 负责，展示层已即时）。
+	if got := mustGet(t, st, 1).RequestCount; got != 0 {
+		t.Errorf("未 Flush 时 DB request_count = %d, want 0", got)
+	}
+
+	// Flush 后 DB 落库，与内存一致，且不重复累加。
+	if err := pool.Flush(); err != nil {
+		t.Fatalf("Flush() 失败: %v", err)
+	}
+	if got := mustGet(t, st, 1).RequestCount; got != 3 {
+		t.Errorf("Flush 后 DB request_count = %d, want 3", got)
+	}
+	keys, _ = pool.Snapshot()
+	if got := keys[0].Key.RequestCount; got != 3 {
+		t.Errorf("Flush 后 Snapshot 调用数 = %d, want 3", got)
+	}
+
+	// Reload 后内存从 DB 重建，计数保持不变（不因双路径而翻倍）。
+	if err := pool.Reload(); err != nil {
+		t.Fatalf("Reload() 失败: %v", err)
+	}
+	keys, _ = pool.Snapshot()
+	if got := keys[0].Key.RequestCount; got != 3 {
+		t.Errorf("Reload 后 Snapshot 调用数 = %d, want 3（不得翻倍）", got)
+	}
+}
+
 // ---- 并发 ----
 
 func TestConcurrentNextAndReport(t *testing.T) {
