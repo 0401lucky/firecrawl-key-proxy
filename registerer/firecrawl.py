@@ -11,6 +11,7 @@
 
 返回值统一为 RegisterResult，status 供上层决定是否换代理重试。
 """
+import random
 import re
 import threading
 import time
@@ -32,7 +33,7 @@ class RegisterResult:
     message: str = ""
 
 
-_SIGNUP_RESULT_TIMEOUT = 15
+_SIGNUP_RESULT_TIMEOUT = 25
 _KEY_RE = re.compile(r"fc-[a-zA-Z0-9_-]{20,}")
 
 
@@ -113,10 +114,16 @@ def wait_for_signup_result(page, signup_events, timeout=_SIGNUP_RESULT_TIMEOUT):
 
 # ---- 表单与提取（移植参考项目） ----
 
-def fill_first_input(page, selectors, value):
+def fill_first_input(page, selectors, value, humanize=True):
+    """填充第一个存在的输入框。humanize 时用 type() 逐字符输入（带随机延迟），
+    避免 fill() 的瞬时赋值特征被风控识别。"""
     for selector in selectors:
         if page.query_selector(selector):
-            page.fill(selector, value)
+            if humanize:
+                page.click(selector)
+                page.type(selector, value, delay=60)
+            else:
+                page.fill(selector, value)
             return selector
     return None
 
@@ -325,16 +332,16 @@ def register_with_browser(email: str, password: str, proxy: Proxy | None = None,
                     time.sleep(3)
                     break
 
-            # 2. 填表
+            # 2. 填表（type 逐字符输入模拟真人，随机停顿后提交）
             email_selector = fill_first_input(
                 page, ['input[name="email"]', 'input[type="email"]',
                        'input[placeholder*="email" i]'], email)
             if not email_selector:
                 return RegisterResult(None, "error", "未找到邮箱输入框")
-            time.sleep(1)
+            time.sleep(random.uniform(1.5, 3.5))
             if not fill_first_input(page, ['input[name="password"]', 'input[type="password"]'], password):
                 return RegisterResult(None, "error", "未找到密码输入框")
-            time.sleep(1)
+            time.sleep(random.uniform(1.5, 3.5))
 
             # 3. 提交并判定
             submit_form(page, email_selector)

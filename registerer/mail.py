@@ -87,15 +87,49 @@ def rand_str(n: int = 8) -> str:
     return "".join(random.choices(string.ascii_lowercase + string.digits, k=n))
 
 
+# 密码字符集：去掉连续序列段（如 cdef、4567）与易混淆字符，降低连续命中概率
+_PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%^&*"
+_PASSWORD_SPECIALS = "!@#$%^&*"
+
+
+def _has_repeated_or_consecutive(pw: str, n: int = 3) -> bool:
+    """Firecrawl 密码规则：不允许 3+ 个重复字符或连续字符（如 aaaa/1234/abcd）。
+    """
+    for i in range(len(pw) - n + 1):
+        seg = pw[i:i + n]
+        if len(set(seg)) == 1:  # 重复字符
+            return True
+        codes = [ord(c) for c in seg]
+        if all(codes[j + 1] == codes[j] + 1 for j in range(n - 1)):  # 升序连续
+            return True
+        if all(codes[j + 1] == codes[j] - 1 for j in range(n - 1)):  # 降序连续
+            return True
+    return False
+
+
 def _strong_password() -> str:
-    """12 位强密码：大小写 + 数字 + 特殊字符（Firecrawl 最低要求）。"""
-    return f"Tv{rand_str(6)}{random.randint(100, 999)}!A"
+    """12 位强密码：大小写+数字+特殊字符，且无 3+ 连续/重复字符（Firecrawl 要求）。"""
+    for _ in range(200):
+        pw = "".join(random.choices(_PASSWORD_ALPHABET, k=12))
+        if _has_repeated_or_consecutive(pw):
+            continue
+        if not (any(c.islower() for c in pw) and any(c.isupper() for c in pw)
+                and any(c.isdigit() for c in pw)
+                and any(c in _PASSWORD_SPECIALS for c in pw)):
+            continue
+        return pw
+    raise RuntimeError("生成强密码失败（随机 200 次仍未命中规则）")
+
+
+def _email_prefix() -> str:
+    """随机化邮箱前缀模式（fc- 固定前缀容易被风控识别为批量注册）。"""
+    return random.choice(("fc", "fcx", "fcr", "fire", "scrape", "crawler")) + rand_str(6)
 
 
 def create_email() -> tuple[str, str]:
     """创建带随机子域名的邮箱地址，返回 (address, password)。域名多选时轮询。"""
     password = _strong_password()
-    name = f"fc-{rand_str()}"
+    name = _email_prefix()
     domain = _pick_domain()
 
     for attempt in range(1, 6):
@@ -120,7 +154,7 @@ def create_email() -> tuple[str, str]:
 
         if resp.status_code in (409, 422):
             print(f"⚠️  邮箱创建冲突（{resp.status_code}），换前缀重试 {attempt}/5")
-            name = f"fc-{rand_str()}"
+            name = _email_prefix()
             continue
         raise RuntimeError(
             f"创建邮箱失败 HTTP {resp.status_code}: {resp.text[:200]}")
