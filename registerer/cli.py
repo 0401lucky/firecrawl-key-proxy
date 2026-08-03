@@ -22,6 +22,7 @@ from config import (
     HEADLESS,
     PROXY_ENABLED,
     PROXY_FILE,
+    PROXY_SUBSCRIBE_URLS,
     UPLOAD_ENABLED,
 )
 from firecrawl import RegisterResult, register_with_browser
@@ -79,7 +80,10 @@ def register_one(index: int, total: int, saver: AccountSaver, upload: bool,
 
 def do_register(count: int, concurrency: int, delay: int, upload: bool,
                 headed: bool, accounts_out: str, proxy_file: str | None):
-    pool = ProxyPool.from_file(proxy_file or PROXY_FILE) if (proxy_file or PROXY_ENABLED) else None
+    pool = None
+    if proxy_file or PROXY_ENABLED:
+        pool = ProxyPool.from_file_and_subscriptions(
+            proxy_file or PROXY_FILE, PROXY_SUBSCRIBE_URLS)
     if pool and pool.count == 0:
         print("⚠️  代理文件未读到可用代理（检查路径与格式），将直连注册")
     elif pool:

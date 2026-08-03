@@ -69,6 +69,8 @@ REGISTER_API_URL = _get_str("REGISTER_API_URL")
 REGISTER_API_TOKEN = _get_str("REGISTER_API_TOKEN")
 
 PROXY_FILE = _get_str("PROXY_FILE")
+# 代理订阅 URL（proxyscrape/webshare 等），逗号分隔，与 PROXY_FILE 可同时配置
+PROXY_SUBSCRIBE_URLS = [u.strip() for u in _get_str("PROXY_SUBSCRIBE_URLS").split(",") if u.strip()]
 
 HEADLESS = _get_bool("HEADLESS", True)
 DEFAULT_COUNT = _get_int("DEFAULT_COUNT", 1)
@@ -81,4 +83,4 @@ API_KEY_TIMEOUT = _get_int("API_KEY_TIMEOUT", 20)
 # 上传与代理是否启用
 UPLOAD_ENABLED = bool(REGISTER_API_URL and REGISTER_API_TOKEN and not (
     is_placeholder(REGISTER_API_URL) or is_placeholder(REGISTER_API_TOKEN)))
-PROXY_ENABLED = bool(PROXY_FILE and not is_placeholder(PROXY_FILE))
+PROXY_ENABLED = bool((PROXY_FILE and not is_placeholder(PROXY_FILE)) or PROXY_SUBSCRIBE_URLS)

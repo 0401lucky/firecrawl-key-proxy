@@ -1,18 +1,19 @@
-"""代理池：静态列表文件加载 + round-robin 轮换。
+"""代理池：静态列表文件 + 订阅 URL 拉取 + round-robin 轮换。
 
-文件格式：每行一条代理，# 开头为注释，空行忽略。
-支持 scheme：
-  http://user:pass@host:port
-  socks5://host:port
-  host:port（无 scheme 时按 http 处理）
+代理来源（可同时配置）：
+1. 静态文件：每行一条代理，# 开头为注释，空行忽略。
+2. 订阅 URL（PROXY_SUBSCRIBE_URLS）：proxyscrape / webshare 等订阅，
+   响应为每行 ip:port 或 ip:port:user:pass 的文本列表。
 
-线程安全：next() 用锁保护游标；mark_bad() 把失效代理移入黑名单（进程内），
-黑名单可被外部轮换周期清空（避免短暂故障的代理永久失效）。
+支持 scheme：http://user:pass@host:port / socks5://host:port / 无 scheme 按 http。
+线程安全：next() 用锁保护游标；mark_bad() 把失效代理移入黑名单（进程内）。
 """
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
+
+import requests as std_requests
 
 
 @dataclass
@@ -57,6 +58,22 @@ class ProxyPool:
                         proxies.append(parsed)
         return cls(proxies)
 
+    @classmethod
+    def from_file_and_subscriptions(cls, path: str, subscribe_urls: list[str]) -> "ProxyPool":
+        """文件代理 + 订阅 URL 拉取合并（去重）。"""
+        pool = cls.from_file(path)
+        seen = {p.server for p in pool._all}
+        for url in subscribe_urls:
+            fetched = fetch_subscription(url)
+            added = 0
+            for proxy in fetched:
+                if proxy.server not in seen:
+                    pool._all.append(proxy)
+                    seen.add(proxy.server)
+                    added += 1
+            print(f"🔄 订阅 {url[:60]}... 拉到 {len(fetched)} 条（新增 {added}）")
+        return pool
+
     @property
     def count(self) -> int:
         return len(self._all)
@@ -100,3 +117,34 @@ def _parse_line(line: str) -> Proxy | None:
 
     server = f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"
     return Proxy(server=server, username=parsed.username or "", password=parsed.password or "")
+
+
+def _parse_subscription_line(line: str) -> Proxy | None:
+    """解析订阅行：ip:port 或 ip:port:user:pass（proxyscrape/webshare 格式）。"""
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+    parts = line.split(":")
+    if len(parts) == 2:
+        return Proxy(server=f"http://{parts[0]}:{parts[1]}", username="", password="")
+    if len(parts) == 4:
+        return Proxy(server=f"http://{parts[0]}:{parts[1]}",
+                     username=parts[2], password=parts[3])
+    return None
+
+
+def fetch_subscription(url: str) -> list[Proxy]:
+    """从订阅 URL 拉取代理列表（每行 ip:port 或 ip:port:user:pass）。"""
+    try:
+        resp = std_requests.get(url, timeout=25, headers={"User-Agent": "curl/8.0"})
+        resp.raise_for_status()
+    except Exception as exc:
+        print(f"⚠️  订阅拉取失败 {url[:70]}: {exc}")
+        return []
+
+    proxies = []
+    for line in resp.text.splitlines():
+        parsed = _parse_subscription_line(line)
+        if parsed:
+            proxies.append(parsed)
+    return proxies
