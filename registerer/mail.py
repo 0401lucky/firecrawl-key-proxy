@@ -56,20 +56,20 @@ def fetch_domains() -> list[str]:
 
 
 def _pick_domain() -> str:
-    """round-robin 选择收件域名：显式配置优先，否则自动拉取（缓存 5 分钟）。"""
+    """round-robin 选择收件域名：自动拉取优先（4 域名轮询），配置仅作拉取失败兜底。"""
     global _domain_cursor, _domains_cache, _domains_cache_time
     configured = TEMP_MAIL_DOMAINS or ([TEMP_MAIL_DOMAIN] if TEMP_MAIL_DOMAIN else [])
 
-    if not configured:
-        now = time.time()
-        if _domains_cache is None or now - _domains_cache_time > _DOMAINS_TTL:
-            fetched = fetch_domains()
-            _domains_cache = fetched or []
+    now = time.time()
+    if _domains_cache is None or now - _domains_cache_time > _DOMAINS_TTL:
+        fetched = fetch_domains()
+        if fetched:
+            _domains_cache = fetched
             _domains_cache_time = now
-        domains = _domains_cache
-    else:
-        domains = configured
+        elif _domains_cache is None:
+            _domains_cache = configured
 
+    domains = _domains_cache or configured
     if not domains:
         raise RuntimeError("无法获取域名列表（检查 TEMP_MAIL_API_URL）且未配置 TEMP_MAIL_DOMAIN")
     with _domain_lock:

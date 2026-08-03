@@ -148,7 +148,8 @@ class TestConfigPlaceholder(unittest.TestCase):
 
     def test_pick_domain_round_robin(self):
         import mail
-        # 显式配置优先
+        # 拉取失败时回退配置
+        mail.fetch_domains = lambda: []
         mail.TEMP_MAIL_DOMAINS = ["a.com", "b.com", "c.com"]
         mail.TEMP_MAIL_DOMAIN = "x.com"
         mail._domain_cursor = 0
@@ -158,7 +159,20 @@ class TestConfigPlaceholder(unittest.TestCase):
         # 未配置多域名时回退单域名。
         mail.TEMP_MAIL_DOMAINS = []
         mail._domain_cursor = 0
+        mail._domains_cache = None
         self.assertEqual(mail._pick_domain(), "x.com")
+
+    def test_pick_domain_fetch_priority(self):
+        import mail
+        # 拉取成功时优先用拉取结果（即使配置了单域名兜底）
+        mail.fetch_domains = lambda: ["a.com", "b.com"]
+        mail.TEMP_MAIL_DOMAINS = []
+        mail.TEMP_MAIL_DOMAIN = "x.com"
+        mail._domain_cursor = 0
+        mail._domains_cache = None
+        mail._domains_cache_time = 0
+        picked = [mail._pick_domain() for _ in range(3)]
+        self.assertEqual(picked, ["a.com", "b.com", "a.com"])
 
     def test_fetch_domains_from_settings(self):
         """open_api/settings 返回 randomSubdomainDomains 时能正确拉取。"""
