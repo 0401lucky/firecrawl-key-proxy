@@ -96,3 +96,13 @@ python -m unittest discover -s tests -v
 - Firecrawl 页面选择器可能随改版失效：失败日志会给出具体状态，必要时 `--headed`
   前台观察后调整 `registerer/firecrawl.py` 的选择器
 - 密码明文只存本地 `accounts.csv`，不上传（Go 代理侧只收 Key）
+
+## 风控实测（重要）
+
+- **密码规则**：Firecrawl 拒绝含 3+ 连续/重复字符的密码（aaaa/1234/abcd），且**静默拒绝**
+  （页面无提示、不发验证邮件，表现为 stalled 误判）。密码生成器已适配。
+- **reCAPTCHA Enterprise**：注册页嵌入 Google reCAPTCHA（评分式，无可见挑战）。
+  同一 IP 连续多次自动化注册后评分下降，Firecrawl 静默不再发验证邮件。
+  缓解：代理池换 IP（每个 IP 独立评分）、拉长间隔（--delay 60+）。
+- **IP 风控吊销**：有注册成功但几小时后 key 变 401 的案例（账号级标记）。
+  上传前真实验证可挡住坏 key 进池。
