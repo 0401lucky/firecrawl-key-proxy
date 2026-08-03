@@ -98,7 +98,8 @@ func run(ctx context.Context) error {
 		time.Duration(cfg.SessionTTLHours)*time.Hour, keypool.RealClock{}, logger)
 	go sessionAuth.StartSessionCleanup(ctx)
 	adminServer := admin.NewServer(pool, st, proxyAuth, sessionAuth,
-		firecrawl.NewClient(cfg.UpstreamBaseURL), logger, keypool.RealClock{})
+		firecrawl.NewClient(cfg.UpstreamBaseURL), logger, keypool.RealClock{},
+		cfg.RegisterToken)
 	// 后台额度刷新：独立 goroutine，出错/关闭不影响代理调度。
 	go adminServer.StartCreditRefresh(ctx, time.Duration(cfg.CreditRefreshMinutes)*time.Minute)
 
@@ -109,7 +110,8 @@ func run(ctx context.Context) error {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 	// 面板 JSON API（session cookie 认证，与代理认证互斥）。
-	mux.Handle("/api/admin/", adminServer.Router())
+	// 挂在 /api/ 前缀：/api/admin/* 走 SessionAuth，/api/register/* 走独立 token 认证。
+	mux.Handle("/api/", adminServer.Router())
 	// 代理转发路径：按前缀挂载，外层包代理 Key 认证中间件（AC7/AC13）。
 	// 中间件只覆盖代理前缀，/healthz 与 /api/admin/* 不受影响。
 	authedProxy := proxyAuth.Middleware(proxyHandler)

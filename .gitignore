@@ -21,6 +21,11 @@
 .env
 .env.local
 
+# 注册器本地数据：账号密码与 API Key 明文、代理列表，绝不入库
+/registerer/accounts.csv
+/registerer/proxies.txt
+/registerer/*.log
+
 # 编辑器与系统
 .idea/
 .vscode/

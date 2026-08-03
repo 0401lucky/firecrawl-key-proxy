@@ -71,8 +71,8 @@ func (s *Server) handleCreateUpstreamKey(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid_input", "name 与 api_key 都不能为空")
 		return
 	}
-	uk := &store.UpstreamKey{Name: body.Name, APIKey: body.APIKey}
-	if _, err := s.st.UpstreamKeys.Create(uk); err != nil {
+	uk, err := s.createUpstreamKey(body.Name, body.APIKey)
+	if err != nil {
 		if isUniqueViolation(err) {
 			writeError(w, http.StatusConflict, "duplicate_api_key", "该上游 Key 已存在")
 			return
@@ -80,9 +80,6 @@ func (s *Server) handleCreateUpstreamKey(w http.ResponseWriter, r *http.Request)
 		s.logger.Warn("创建上游 Key 失败", "error", err.Error())
 		writeError(w, http.StatusInternalServerError, "internal_error", "创建失败")
 		return
-	}
-	if err := s.pool.Reload(); err != nil {
-		s.logger.Warn("创建后 Reload 失败", "error", err.Error())
 	}
 	writeJSON(w, http.StatusCreated, toUpstreamDTO(uk, 0))
 }

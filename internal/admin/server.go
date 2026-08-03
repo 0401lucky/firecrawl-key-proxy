@@ -20,16 +20,18 @@ import (
 
 // Server 聚合面板 API 的全部依赖。所有字段只读，并发安全。
 type Server struct {
-	pool      *keypool.Pool
-	st        *store.Store
-	proxyAuth *auth.ProxyKeyAuth
-	session   *auth.SessionAuth
-	client    *firecrawl.Client
-	logger    *slog.Logger
-	clock     keypool.Clock
+	pool          *keypool.Pool
+	st            *store.Store
+	proxyAuth     *auth.ProxyKeyAuth
+	session       *auth.SessionAuth
+	client        *firecrawl.Client
+	logger        *slog.Logger
+	clock         keypool.Clock
+	registerToken string // 自动注册器上传 Key 的共享 token，空表示未启用
 }
 
 // NewServer 构造面板 API 服务。
+// registerToken 为空时 /api/register/keys 返回 503（注册接入未启用）。
 func NewServer(
 	pool *keypool.Pool,
 	st *store.Store,
@@ -38,10 +40,12 @@ func NewServer(
 	client *firecrawl.Client,
 	logger *slog.Logger,
 	clock keypool.Clock,
+	registerToken string,
 ) *Server {
 	return &Server{
 		pool: pool, st: st, proxyAuth: proxyAuth, session: session,
 		client: client, logger: logger, clock: clock,
+		registerToken: registerToken,
 	}
 }
 
@@ -52,6 +56,8 @@ func (s *Server) Router() http.Handler {
 
 	mux.HandleFunc("POST /api/admin/login", s.handleLogin)
 	mux.HandleFunc("GET /api/admin/session", s.handleSessionStatus)
+	// 注册器接入接口：独立 token 认证（register.go），不经过 SessionAuth。
+	mux.HandleFunc("POST /api/register/keys", s.handleRegisterCreateKey)
 
 	protected := http.NewServeMux()
 	protected.HandleFunc("POST /api/admin/logout", s.handleLogout)

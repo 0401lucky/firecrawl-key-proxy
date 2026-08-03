@@ -70,7 +70,7 @@ func setupAdmin(t *testing.T, upstreamURL string, n int) (*Server, *store.Store,
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	client := firecrawl.NewClient(upstreamURL)
 	srv := NewServer(pool, st, proxyAuth, session, client,
-		slog.New(slog.NewTextHandler(io.Discard, nil)), clock)
+		slog.New(slog.NewTextHandler(io.Discard, nil)), clock, "")
 	return srv, st, clock
 }
 
@@ -558,8 +558,7 @@ func setupFullStack(t *testing.T) (http.Handler, *httptest.Server, *store.Store)
 	proxyAuth := auth.NewProxyKeyAuth(st.ProxyKeys)
 	session := auth.NewSessionAuth(st.Sessions, testPassword, time.Hour, clock, logger)
 	client := firecrawl.NewClient(up.URL)
-	srv := NewServer(pool, st, proxyAuth, session, client, logger, clock)
-
+	srv := NewServer(pool, st, proxyAuth, session, client, logger, clock, "")
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)

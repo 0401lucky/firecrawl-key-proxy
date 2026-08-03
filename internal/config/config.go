@@ -19,6 +19,7 @@ type Config struct {
 	PublicBaseURL        string   // 对外地址，用于响应体绝对 URL 重写（必填）
 	DBPath               string   // SQLite 文件路径，默认 /data/proxy.db
 	AdminPassword        string   // 面板管理员密码（必填）
+	RegisterToken        string   // 自动注册器上传 Key 的共享 token（可选，空则接口返回 503）
 	UpstreamBaseURL      string   // 上游 Firecrawl 地址，默认 https://api.firecrawl.dev
 	ProxyPathPrefixes    []string // 需转发的路径前缀，默认 /v1/,/v2/
 	MaxFailoverAttempts  int      // 单个请求最多尝试的 Key 数，默认 3
@@ -66,6 +67,7 @@ func Load() (*Config, error) {
 	cfg.PublicBaseURL = getEnv("PUBLIC_BASE_URL", "")
 	cfg.DBPath = getEnv("DB_PATH", cfg.DBPath)
 	cfg.AdminPassword = getEnv("ADMIN_PASSWORD", "")
+	cfg.RegisterToken = getEnv("REGISTER_TOKEN", "")
 	cfg.UpstreamBaseURL = getEnv("UPSTREAM_BASE_URL", cfg.UpstreamBaseURL)
 	cfg.LogLevel = getEnv("LOG_LEVEL", cfg.LogLevel)
 

@@ -95,6 +95,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("CREDIT_REFRESH_MINUTES", "0")
 	t.Setenv("SESSION_TTL_HOURS", "24")
 	t.Setenv("LOG_LEVEL", "debug")
+	t.Setenv("REGISTER_TOKEN", "reg-token-123")
 
 	cfg, err := Load()
 	if err != nil {
@@ -123,6 +124,9 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.CreditRefreshMinutes != 0 {
 		t.Errorf("CREDIT_REFRESH_MINUTES 覆盖失败: got %d", cfg.CreditRefreshMinutes)
+	}
+	if cfg.RegisterToken != "reg-token-123" {
+		t.Errorf("REGISTER_TOKEN 覆盖失败: got %q", cfg.RegisterToken)
 	}
 }
 
